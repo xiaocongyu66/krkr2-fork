@@ -2,14 +2,26 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <cstdarg> // B4: va_start/va_end used in ShowInMessageBox; the cocos
+// include chain used to supply <stdarg.h>.
 #include <map>
 #include <set>
 #include <utility>
 #include <vector>
+// B4: cocos2dx 头仅 cocos 壳配置编译（KRKR2_BUILD_APP 由 visual 模块
+// CMake 注入）。AdapterTexture2D / Director / EventListener /
+// blendResetToCache 等引用限定在相应 #if 段内；纹理/着色器状态调用直接
+// 走宿主加载的 gl* 符号（等价于 cocos2d::GL 无缓存直通）。
+#if defined(KRKR2_BUILD_APP)
 #include "renderer/CCTexture2D.h"
 #include "renderer/CCGLProgramCache.h"
 #include "renderer/CCGLProgram.h"
 #include "renderer/ccGLStateCache.h"
+#include "base/CCDirector.h"
+#include "base/CCEventListenerCustom.h"
+#include "base/CCEventDispatcher.h"
+#include "base/CCEventType.h"
+#endif
 #include "ogl_common.h"
 #include "tjsCommHead.h"
 #include "../RenderManager.h"
@@ -20,10 +32,7 @@
 #include "SysInitIntf.h"
 #include <assert.h>
 #include <sstream>
-#include "base/CCDirector.h"
-#include "base/CCEventListenerCustom.h"
-#include "base/CCEventDispatcher.h"
-#include "base/CCEventType.h"
+#include "TVPScreen.h"
 #include "Platform.h"
 #include "ConfigManager/IndividualConfigManager.h"
 #include "imageops/ImageOps.h"
@@ -150,7 +159,7 @@ static void TVPInitGLExtensionInfo() {
 #endif
 #ifdef TEST_SHADER_ENABLED
     for(const std::string &line : sTVPGLExtensions) {
-        cocos2d::log("%s", line.c_str());
+        TVPConsoleLog(ttstr(line));
     }
 #endif
 }
@@ -491,9 +500,23 @@ static unsigned int power_of_two(unsigned int input, unsigned int value = 32) {
     return value;
 }
 
+// B4: 直接调用 gl* —— 等价于 cocos2d::GL::activeTexture/bindTexture2D 的
+// 无缓存直通路径（cocos 缓存只跳过冗余调用，本引擎每帧都显式管理 GL 状态）。
 static void _glBindTexture2D(GLuint t) {
-    cocos2d::GL::activeTexture(GL_TEXTURE0);
-    cocos2d::GL::bindTexture2D(t);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, t);
+}
+
+// B4: 等价于 cocos2d::GL::enableVertexAttribs 的无缓存语义 —— 从低位到最高
+// 置位逐位启用/禁用顶点属性数组（cocos 实现仅跳过与缓存相同的调用，函数
+// 等价；其 VAO 缓存路径对本引擎逐帧设置指针的用法没有可观察差别）。
+static void _glEnableVertexAttribs(unsigned int flags) {
+    for(unsigned int i = 0; flags; ++i, flags >>= 1) {
+        if(flags & 1)
+            glEnableVertexAttribArray(i);
+        else
+            glDisableVertexAttribArray(i);
+    }
 }
 
 static GLint _prevRenderBuffer;
@@ -521,9 +544,24 @@ static void _RestoreGLStatues() {
     if(GL_CHECK_unpack_subimage) {
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     }
+#if defined(KRKR2_BUILD_APP)
     cocos2d::GL::blendResetToCache();
+#else
+    // B4 SDL3: 没有 cocos 状态缓存可复位；显式重设为该缓存记录的默认混合
+    // 组合（CC_BLEND_SRC/DST = GL_ONE/GL_ONE_MINUS_SRC_ALPHA，方程
+    // GL_FUNC_ADD），等价于 blendResetToCache 在未改动的缓存上的行为。
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                        GL_ONE_MINUS_SRC_ALPHA);
+#endif
     TVPSetRenderTarget(0);
+#if defined(KRKR2_BUILD_APP)
     cocos2d::Director::getInstance()->setViewport();
+#else
+    // B4 SDL3: 无 Director；回退逻辑屏幕基准重设视口。TODO B4+：SDL3 壳
+    // 完成渲染集成后，用 SdlAppDelegate 的真实窗口尺寸替换。
+    glViewport(0, 0, tTVPScreen::GetWidth(), tTVPScreen::GetHeight());
+#endif
 }
 
 static tjs_uint8 *TVPShrinkXYBy2(tjs_uint *dpitch, const tjs_uint8 *src,
@@ -892,7 +930,7 @@ protected:
         iTVPTexture2D(w, h), Format(format) {
         if(mode) {
             glGenTextures(1, &texture);
-            cocos2d::GL::bindTexture2D(texture);
+            _glBindTexture2D(texture);
 
             // glBindTexture(GL_TEXTURE_2D, texture);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mode);
@@ -907,7 +945,7 @@ protected:
         if(PixelData)
             delete[] PixelData;
         if(texture)
-            cocos2d::GL::deleteTexture(texture);
+            glDeleteTextures(1, &texture);
     }
 
     int getPixelSize() {
@@ -1023,6 +1061,10 @@ protected:
 
     TVPTextureFormat::e GetFormat() const override { return Format; }
 
+    // B4: AdapterTexture2D —— 仅 cocos 壳编译（给 cocos Sprite 用的纹理
+    // 适配半边）。SDL3 路径用 cpp/core/render/KrkrTexture 替代；此处门控后
+    // 非 cocos 构建回落到 iTVPTexture2D 的默认 GetAdapterTexture。
+#if defined(KRKR2_BUILD_APP)
     class AdapterTexture2D : public cocos2d::Texture2D {
     public:
         iTVPTexture2D *_owner;
@@ -1063,6 +1105,7 @@ protected:
         ret->autorelease();
         return ret;
     }
+#endif
 
 public:
     bool IsOpaque() override {
@@ -1154,7 +1197,11 @@ public:
             pt[i * 2 + 1] = (float)p[i].y * th;
         }
     }
-    void Bind(unsigned int i) { cocos2d::GL::bindTexture2DN(i, texture); }
+    // B4: 等价于 cocos2d::GL::bindTexture2DN(i, t)（activeTexture + 绑定）。
+    void Bind(unsigned int i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, texture);
+    }
 };
 
 static TVPTextureFormat::e _GetTextureFormatFromBPP(int bpp) {
@@ -1196,7 +1243,7 @@ class tTVPOGLTexture2D_split : public tTVPOGLTexture2D {
         // 		}
         // 		UnusedTextureName.clear();
         for(auto &it : CachedTexture) {
-            cocos2d::GL::deleteTexture(it.second.Name);
+            glDeleteTextures(1, &it.second.Name);
         }
         CachedTexture.clear();
         texture = 0;
@@ -1210,7 +1257,7 @@ class tTVPOGLTexture2D_split : public tTVPOGLTexture2D {
         // 		}
         GLuint ret;
         glGenTextures(1, &ret);
-        cocos2d::GL::bindTexture2D(ret);
+        _glBindTexture2D(ret);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1964,7 +2011,7 @@ public:
         return true;
     }
     void SetParameterColor4B(int id, unsigned int clr) override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         glUniform4f(id, (clr & 0xFF) / 255.0f, ((clr >> 8) & 0xFF) / 255.0f,
                     ((clr >> 16) & 0xFF) / 255.0f, (clr >> 24) / 255.0f);
     };
@@ -1976,15 +2023,15 @@ public:
         return ret;
     }
     void SetParameterOpa(int id, int Value) override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         glUniform1f(id, Value / 255.f);
     };
     void SetParameterFloat(int id, float Value) override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         glUniform1f(id, Value);
     }
     void SetParameterFloatArray(int id, float *Value, int nElem) override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         switch(nElem) {
             case 2:
                 glUniform2f(id, Value[0], Value[1]);
@@ -2046,7 +2093,7 @@ public:
             e.AppendMessage(Name);
             throw;
         }
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         std::string tex("tex");
         std::string coord("a_texCoord");
         for(int i = 0; i < m_nTex; ++i) {
@@ -2060,7 +2107,7 @@ public:
         pos_attr_location = glGetAttribLocation(program, "a_position");
     }
     void Apply() override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         if(BlendFunc) {
             glEnable(GL_BLEND);
             glBlendEquation(BlendFunc);
@@ -2183,7 +2230,7 @@ class tTVPOGLRenderMethod_Script_BlendColor
     void SetParameterOpa(int id, int Value) override {
         if(id == 0x709AC167) {
             float v = Value / 255.f;
-            cocos2d::GL::useProgram(program);
+            glUseProgram(program);
             glBlendColor(v, v, v, v);
         } else {
             inherit::SetParameterOpa(id, Value);
@@ -2192,7 +2239,7 @@ class tTVPOGLRenderMethod_Script_BlendColor
     void SetParameterFloat(int id, float Value) override {
         if(id == 0x709AC167) {
             float v = Value;
-            cocos2d::GL::useProgram(program);
+            glUseProgram(program);
             glBlendColor(v, v, v, v);
         } else {
             inherit::SetParameterFloat(id, Value);
@@ -2215,7 +2262,7 @@ class tTVPOGLRenderMethod_AdjustGamma : public tTVPOGLRenderMethod_Script {
             static int id_gamma = EnumParameterID("u_gamma"),
                        id_floor = EnumParameterID("u_floor"),
                        id_amp = EnumParameterID("u_amp");
-            cocos2d::GL::useProgram(program);
+            glUseProgram(program);
             glUniform3f(id_gamma, 1.0f / data.RGamma, 1.0f / data.GGamma,
                         1.0f / data.BGamma);
             glUniform3f(id_floor, data.RFloor / 255.0f, data.GFloor / 255.0f,
@@ -2243,7 +2290,7 @@ class tTVPOGLRenderMethod_UnivTrans : public tTVPOGLRenderMethod_Script {
     }
     int m_vague;
     void SetParameterInt(int id, int Value) override {
-        cocos2d::GL::useProgram(program);
+        glUseProgram(program);
         if(id == u_vague) {
             m_vague = Value;
             glUniform1f(id, Value / 255.f);
@@ -2333,7 +2380,7 @@ bool tTVPOGLTexture2D::RestoreNormalSize() {
     if(w < GetMaxTextureWidth() && h < GetMaxTextureHeight()) {
         GLuint newtex;
         glGenTextures(1, &newtex);
-        cocos2d::GL::bindTexture2D(newtex);
+        _glBindTexture2D(newtex);
         tjs_int intw = power_of_two(w), inth = power_of_two(h);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, intw, inth, 0, GL_RGBA,
                      GL_UNSIGNED_BYTE, nullptr);
@@ -2357,20 +2404,20 @@ bool tTVPOGLTexture2D::RestoreNormalSize() {
         for(unsigned int i = 0; i < 1; ++i) {
             VA_flag |= 1 << method->GetTexCoordAttr(i);
         }
-        cocos2d::GL::enableVertexAttribs(VA_flag);
+        _glEnableVertexAttribs(VA_flag);
         glVertexAttribPointer(method->GetPosAttr(), 2, GL_FLOAT, GL_FALSE, 0,
                               vertices);
 
         GLVertexInfo vtx;
         ApplyVertex(vtx, tTVPRect(0, 0, w, h));
-        cocos2d::GL::bindTexture2D(texture);
+        _glBindTexture2D(texture);
         glVertexAttribPointer(method->GetTexCoordAttr(0), 2, GL_FLOAT, GL_FALSE,
                               0, &vtx.vtx.front());
         glDrawArrays(GL_TRIANGLES, 0, 6);
         CHECK_GL_ERROR_DEBUG();
 
         _totalVMemSize -= internalW * internalH * getPixelSize();
-        cocos2d::GL::deleteTexture(texture);
+        glDeleteTextures(1, &texture);
 
         texture = newtex;
         internalW = intw;
@@ -2965,6 +3012,10 @@ protected:
         //		_duplicateTargetTexture =
         // IndividualConfigManager::GetInstance()->GetValueBool("ogl_dup_target",
         // true);
+        // B4: GL 上下文重建（Android surface 丢失等）经 cocos 事件分发器
+        // 通知渲染方法重编译；SDL3 壳没有 Director 事件总线，等价的上下文
+        // 丢失通知由 SdlAppDelegate::setContextLostCallback 承担（B3+）。
+#if defined(KRKR2_BUILD_APP)
         cocos2d::EventListenerCustom *listener =
             cocos2d::EventListenerCustom::create(
                 EVENT_RENDERER_RECREATED, [this](cocos2d::EventCustom *) {
@@ -2978,6 +3029,7 @@ protected:
         cocos2d::Director::getInstance()
             ->getEventDispatcher()
             ->addEventListenerWithFixedPriority(listener, 1);
+#endif
         TVPSetPostUpdateEvent(_RestoreGLStatues);
     }
 
@@ -4458,13 +4510,13 @@ public:
         for(unsigned int i = 0; i < 1; ++i) {
             VA_flag |= 1 << method->GetTexCoordAttr(i);
         }
-        cocos2d::GL::enableVertexAttribs(VA_flag);
+        _glEnableVertexAttribs(VA_flag);
         glVertexAttribPointer(method->GetPosAttr(), 2, GL_FLOAT, GL_FALSE, 0,
                               vertices);
 
         GLVertexInfo vtx;
         src->ApplyVertex(vtx, rcsrc);
-        cocos2d::GL::bindTexture2D(src->texture);
+        _glBindTexture2D(src->texture);
 
         glVertexAttribPointer(method->GetTexCoordAttr(0), 2, GL_FLOAT, GL_FALSE,
                               0, &vtx.vtx.front());
@@ -4607,7 +4659,7 @@ public:
         for(unsigned int i = 0; i < texlist.size(); ++i) {
             VA_flag |= 1 << method->GetTexCoordAttr(i);
         }
-        cocos2d::GL::enableVertexAttribs(VA_flag);
+        _glEnableVertexAttribs(VA_flag);
         glVertexAttribPointer(method->GetPosAttr(), 2, GL_FLOAT, GL_FALSE, 0,
                               vertices);
         for(unsigned int i = 0; i < texlist.size(); ++i) {
@@ -4768,7 +4820,7 @@ public:
         for(unsigned int i = 0; i < texlist.size(); ++i) {
             VA_flag |= 1 << method->GetTexCoordAttr(i);
         }
-        cocos2d::GL::enableVertexAttribs(VA_flag);
+        _glEnableVertexAttribs(VA_flag);
         glVertexAttribPointer(method->GetPosAttr(), 2, GL_FLOAT, GL_FALSE, 0,
                               &pttar.front());
         CHECK_GL_ERROR_DEBUG();
@@ -4821,7 +4873,7 @@ public:
             program =
                 CombineProgram(GetVertShader(m_nTex),
                                CompileShader(GL_FRAGMENT_SHADER, m_strScript));
-            cocos2d::GL::useProgram(program);
+            glUseProgram(program);
             std::string tex("tex");
             std::string coord("a_texCoord");
             for(int i = 0; i < m_nTex; ++i) {
@@ -4844,7 +4896,7 @@ public:
         }
 
         void ApplyMatrix(const float *mtx /*3x3*/) {
-            cocos2d::GL::useProgram(program);
+            glUseProgram(program);
             glUniformMatrix3fv(id_Matrix, 1, GL_FALSE, mtx);
         }
     };

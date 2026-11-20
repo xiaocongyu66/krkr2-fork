@@ -80,6 +80,12 @@ krkr2_target_link_foundation(${PROJECT_NAME} PUBLIC)
 target_link_libraries(${PROJECT_NAME} PRIVATE core_sound_module core_utils_module)
 krkr2_target_include_base_headers(${PROJECT_NAME})
 krkr2_target_include_environ_headers(${PROJECT_NAME})
+# B4: cocos 侧源码段（RenderManager/RenderManager_ogl/TVPScreen 内的
+# KRKR2_BUILD_APP 门控）在默认 full 构建开启，SDL3 壳配置（KRKR2_BUILD_APP=OFF）
+# 下编译为等价的非 cocos 路径。
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    KRKR2_BUILD_APP=$<BOOL:${KRKR2_BUILD_APP}>
+)
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${KRKR2_CORE_DIR}/plugin
 )
@@ -89,10 +95,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE libbpg)
 find_package(WebP CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} INTERFACE WebP::webp WebP::webpdecoder WebP::webpdemux)
 
-find_package(cocos2dx CONFIG REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE
-        cocos2dx::cocos2d
-)
+# cocos2dx：仅 cocos 壳配置依赖（B4）。visual 的 cocos 引用面（RenderManager
+# 软件 renderer 的 Texture2D 适配、ogl renderer 的 AdapterTexture2D、
+# TVPScreen 的 Director 帧尺寸）经 KRKR2_BUILD_APP 编译门控留在模块内，
+# 非 cocos 配置不链接 cocos2dx。
+if(KRKR2_BUILD_APP)
+    find_package(cocos2dx CONFIG REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+            cocos2dx::cocos2d
+    )
+endif()
 
 find_package(JXR REQUIRED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE -D__ANSI__)

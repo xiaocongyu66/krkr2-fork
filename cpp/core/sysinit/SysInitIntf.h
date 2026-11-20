@@ -42,6 +42,13 @@ extern void TVPMainWindowClosed(); // called from WindowIntf.cpp,
 // window is visible.
 //---------------------------------------------------------------------------
 
+// B4: host hook -- default renderer name ("software"/"opengl") used when the
+// individual config has no "renderer" entry. The cocos host keeps
+// "software"; the SDL3 shell forces "opengl" because it has no software
+// renderer presentation path. Implemented by each host
+// (environ/cocos2d/AppDelegate.cpp, environ/sdl3/SdlEngineRunner.cpp).
+extern const char *TVPGetDefaultRendererName();
+
 extern bool TVPSystemUninitCalled;
 // whether TVPSystemUninit is called or not
 

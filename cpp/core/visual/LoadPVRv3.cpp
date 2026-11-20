@@ -1,4 +1,9 @@
+// B4: <cocos/base/pvr.h> 提供 PVRTDecompressPVRTC 的声明（实现在 cocos2dx
+// 库内），仅 cocos 壳配置编译；PVRv3Header/PVR3TexturePixelFormat 由
+// 本地 ogl/pvr.h 提供在两个配置下。
+#if defined(KRKR2_BUILD_APP)
 #include <cocos/base/pvr.h>
+#endif
 #include "tjsCommHead.h"
 #include "GraphicsLoaderIntf.h"
 #include "tjsDictionary.h"
@@ -233,11 +238,22 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
     switch((PVR3TexturePixelFormat)hdr.pixelFormat) {
         case PVR3TexturePixelFormat::PVRTC2BPP_RGB:
         case PVR3TexturePixelFormat::PVRTC2BPP_RGBA:
-            PVRTDecompressPVRTC(psrc, pitch / 4, hdr.height, pixel, true);
-            break;
         case PVR3TexturePixelFormat::PVRTC4BPP_RGB:
         case PVR3TexturePixelFormat::PVRTC4BPP_RGBA:
-            PVRTDecompressPVRTC(psrc, pitch / 4, hdr.height, pixel, false);
+#if defined(KRKR2_BUILD_APP)
+            // PVRTC 解码器（PVRTDecompressPVRTC）来自 cocos2dx 库；cocos
+            // 配置保持原调用路径。
+            PVRTDecompressPVRTC(psrc, pitch / 4, hdr.height, pixel,
+                                (PVR3TexturePixelFormat)hdr.pixelFormat ==
+                                    PVR3TexturePixelFormat::PVRTC2BPP_RGB);
+#else
+            // B4: SDL3 壳不链接 cocos2dx，没有 PVRTC 解码器；PVRTC 纹理
+            // 报Unsupported 而不是产生未解析符号。
+            TVPThrowExceptionMessage(
+                TJS_W("PVR Load Error/PVRTC format requires the cocos2dx "
+                      "PVRTC decompressor, unavailable in the SDL3 shell "
+                      "yet"));
+#endif
             break;
         case PVR3TexturePixelFormat::ETC1:
         case PVR3TexturePixelFormat::ETC2_RGB:

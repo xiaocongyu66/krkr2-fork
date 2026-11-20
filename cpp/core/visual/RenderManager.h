@@ -92,6 +92,9 @@ struct TVPTextureFormat {
     };
 };
 
+// B4: 前向声明保留为 host 适配接缝（cocos 壳经 iTVPTexture2D 派生类提供
+// GetAdapterTexture 的 Texture2D 适配；SDL3 图不使用该适配）。仅需前向声明，
+// 不引入 cocos2dx 头文件。
 namespace cocos2d {
     class Texture2D;
 };
@@ -135,8 +138,13 @@ public:
     virtual bool IsStatic() = 0; // aka. is readonly
     virtual bool IsOpaque() = 0;
     // virtual void RefreshBitmap() = 0;
-    virtual cocos2d::Texture2D *
-    GetAdapterTexture(cocos2d::Texture2D *origTex) = 0;
+    // B4: cocos 壳将软件/ogl 纹理包装为 cocos2d::Texture2D 供 Sprite 绘制；
+    // 实现（含 Texture2D 构造）在门控后的派生类里（KRKR2_BUILD_APP）。
+    // 非 cocos 图没有适配调用方，默认实现原样返回，保证 iTVPTexture2D
+    // 在 SDL3 配置下仍是具体可实例化的接口类。
+    virtual cocos2d::Texture2D *GetAdapterTexture(cocos2d::Texture2D *origTex) {
+        return origTex;
+    }
     virtual bool GetScale(float &x, float &y) {
         x = 1.f;
         y = 1.f;

@@ -296,9 +296,11 @@ void TVPAfterSystemInit() {
         }
     }
     // check TVPGraphicSplitOperation option
+    // B4: 默认 renderer 来自宿主钩子（cocos 壳 "software"，SDL3 壳 "opengl"）；
+    // 用户显式配置 "renderer" 时仍以配置为准。
     std::string _val =
         IndividualConfigManager::GetInstance()->GetValue<std::string>(
-            "renderer", "software");
+            "renderer", TVPGetDefaultRendererName());
     if(_val != "software") {
         TVPGraphicSplitOperationType = gsotNone;
     } else {

@@ -39,6 +39,11 @@ const char *TVPGetGLRendererString() {
     return renderer ? renderer : "";
 }
 
+// Host hook (B4, SysInitIntf.h): the historical default renderer is the
+// software renderer; the SDL3 shell overrides this to "opengl" because it
+// has no software presentation path.
+const char *TVPGetDefaultRendererName() { return "software"; }
+
 void TVPAppDelegate::applicationWillEnterForeground() {
     TVPOnHostForeground();
     cocos2d::Director::getInstance()->startAnimation();

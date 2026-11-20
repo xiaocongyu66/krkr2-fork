@@ -200,3 +200,84 @@ ConfigManager 源、无任何 ui/cocos2d 源，`krkr2_sdl3` 链接行不含 `cor
 提供等价实现；`TVPInitializeRuntimePreferences` 在 SDL3 壳尚无调用点（含
 `TVPGetGLRendererString` 的 SDL3 实现）。这些属于 B2-4 宿主钩子批次，
 本次未改。
+
+## B4：movie 与 visual 的去 cocos 化（2026-11-20）
+
+`-DKRKR2_BUILD_APP=OFF -DKRKR2_BUILD_SDL3_APP=ON` 配置现在可以无 cocos2dx
+穿过 movie/visual 两个模块（此前 `movie/CMakeLists.txt:68` 与
+`visual/CMakeLists.txt:92` 的 `find_package(cocos2dx CONFIG REQUIRED)` 是 CI
+sdl3-shell job 报告的下一处缺口）。文件归属与门控决策：
+
+| 文件 | 归属 | 理由 |
+| --- | --- | --- |
+| movie/ffmpeg/KRMoviePlayer.cpp | **core_movie_cocos**（KRKR2_BUILD_APP 门控） | 含 Cocos Node/Sprite 场景图呈现（YUVSprite、CocosWindowAccess），仅 cocos 宿主可用 |
+| movie/ffmpeg/krffmpeg.cpp | **core_movie_cocos** | 实例化 MoviePlayerOverlay/MoviePlayerLayer，`KRMoviePlayer.h` 仅前向声明 cocos 类型，但构造两侧对象的接缝源必须与实现同侧 |
+| movie/ffmpeg/KRMovieLayer.{h,cpp} | 留 core_movie_module | 自身不含 cocos 头；layer 模式经 tTVPBaseTexture 工作，SDL3 图仅因无调用方而不拉取其归档成员 |
+| visual/RenderManager.cpp | 留 core_visual_module，门控去 cocos | 软件渲染器之外还承载渲染管理器注册表、`TVPGetRenderManager`、`TVPGetSoftwareRenderManager`（`tTVPBaseBitmap` 每层位图都依赖），外部引用面过大，不能整块挪走；`CCTexture2D` 包含与 3 个 `GetAdapterTexture` override 包在 `#if defined(KRKR2_BUILD_APP)` 内 |
+| visual/RenderManager.h | 留 | `GetAdapterTexture` 改为非纯虚 + 默认 `return origTex`；保留 `namespace cocos2d` 前向声明（无需 cocos 头）；cocos 侧 override 不变 |
+| visual/ogl/RenderManager_ogl.cpp | 留，门控去 cocos | ogl 渲染器是 SDL3 路径必需品。`AdapterTexture2D` + 其 `GetAdapterTexture` override、Director setViewport、blendResetToCache、.EVENT_RENDERER_RECREATED 监听器均在 `#if defined(KRKR2_BUILD_APP)` 内 |
+| visual/ogl/RenderManager_ogl_test.hpp | 留 | `cocos2d::log` 换 `TJS::TVPConsoleLog`（TEST_SHADER_ENABLED 段，默认不编译） |
+| visual/FontImpl.cpp | 留，完全去 cocos | 内置回退字体 `FileUtils::getDataFromFile` 换 `TVPGetFileBackend()->OpenRead`（B2-3 先例：移动端逐字等价，桌面 LocalFileBackend） |
+| visual/impl/TVPScreen.cpp | 留，门控去 cocos | 6 个静态函数被 base/SystemImpl、WindowImpl、DInputMgn 等 cocos 外代码引用；`GetHeight()` 在 SDL3 分支保持历史回退值 `GetWidth()`（原实现算出 h 后亦返回 w） |
+| visual/LoadPVRv3.cpp | 留，门控去 cocos | 去重复的 `<cocos/base/pvr.h>` include；PVRTC 解码（`PVRTDecompressPVRTC` 由 cocos2dx 库提供）cocos 侧保持原调用，SDL3 侧抛 Unsupported 异常 |
+
+ogl 渲染器去 cocos 逐点（`RenderManager_ogl.cpp` 行号为当前文件）：
+`cocos2d::GL::activeTexture/bindTexture2D/bindTexture2DN/useProgram/deleteTexture/enableVertexAttribs`
+→ 直接 `glActiveTexture/glBindTexture/glUseProgram/glDeleteTextures` 等同符号
+（含文件内新增的 `_glBindTexture2D`/`_glEnableVertexAttribs` 助手，等价于
+`cocos2d::GL` 无缓存直通语义）；`cocos2d::log` → `TVPConsoleLog`。新增
+`#include <cstdarg>`（`va_start` 之前经 cocos 头链获得）与
+`ogl_common.h` 内 `#ifndef CHECK_GL_ERROR_DEBUG` 兜底（cocos 侧宏优先）。
+
+宿主钩子 `TVPGetDefaultRendererName()`（`SysInitIntf.h` 声明，
+`SysInitImpl.cpp` 与 `RenderManager.cpp` 两处 "renderer" 默认值使用）：
+cocos 宿主（`AppDelegate.cpp`）返回 `"software"`，SDL3 壳
+（`SdlEngineRunner.cpp`）返回 `"opengl"`——SDL3 壳没有 software renderer
+的呈现管线。用户显式配置 `renderer` 时仍以配置为准。
+
+SDL3 壳视频接缝 stub（`SdlEngineRunner.cpp`）：`GetVideoOverlayObject`
+/`GetVideoLayerObject`/`GetMixingVideoOverlayObject`/`GetMFVideoOverlayObject`
+四个工厂的 cocos 实现（KRMoviePlayer.cpp/krffmpeg.cpp）随 core_movie_cocos
+被 SDL3 图排除，壳内提供 stub：`*out = nullptr` 后抛
+`TVPThrowExceptionMessage(TVPErrorInKrMovieDLL, "video playback is not
+available in the SDL3 shell yet")`，签名与 `VideoOvlImpl.cpp` 的 extern
+声明逐字对齐。
+
+验证（本机无 vcpkg/SDL3/GLEW/cocos 真库，全部为隔离证据）：
+`g++ -std=c++17 -DLINUX -fsyntax-only`（/tmp/fmtstub + /tmp/sdl3stub +
+/tmp/b4test 的 GL/swscale/lz4/xxhash/TVPMessages.decl.h 存根）对 SDL3 分支
+的 `RenderManager.cpp`、`ogl/RenderManager_ogl.cpp`、`FontImpl.cpp`、
+`impl/TVPScreen.cpp`、`LoadPVRv3.cpp`、`impl/VideoOvlImpl.cpp`、
+`environ/sdl3/SdlEngineRunner.cpp` 全部通过；`KRMovieLayer.cpp`、
+`KRMoviePlayer.cpp`、`krffmpeg.cpp` 因依赖 ffmpeg 头未本地编译（内容未改，
+归属/consume 关系由 CMake 存根配置验证）。沿用 B2-2 存根
+（/tmp/b22/stubs + /tmp/b23pkgconfig）的三次配置：
+full（`-DKRKR2_BUILD_APP=ON`）生成 `core_movie_cocos`（KRMoviePlayer.cpp +
+krffmpeg.cpp，带 visual/environ/base include 集）并链入 `krkr2` 归档组，
+`core_visual_module` 带 `-DKRKR2_BUILD_APP=1`；sdl3（APP=OFF、SDL3=ON）
+无 `core_movie_cocos`、`krkr2_sdl3` 链
+`core_environ_module+各 domain+core_environ_sdl3+core_render_module`、
+visual 带 `-DKRKR2_BUILD_APP=0`、无任何 cocos2dx 引用；along（APP=ON、
+SDL3=ON）仅额外编译 `core_environ_sdl3` 库，无 `krkr2_sdl3` 可执行。
+`python scripts/check_core_module_deps.py` 通过；改动 C++ 文件经
+clang-format 20 `--dry-run -Werror -style=file` 干净。
+`krkr2` full 配置与改动前相比无源码级变化：cocos 侧路径全部保持原语句
+（`cocos2d::GL::blendResetToCache()`、Director setViewport、
+AdapterTexture2D、3 个软件纹理 override 均在门控内逐字保留）。
+
+残留 TODO：
+1. SDL3 壳视频播放完全不可用（四个工厂 stub 抛异常）；krkr2_sdl3 下
+   `MoviePlayerOverlay/MoviePlayerLayer`/`TVPYUVSprite`/`TVPCheckIsVideoFile`
+   均不链接——待 SDL3 侧视频呈现方案（如 core_render 的 GL 纹理路径）。
+2. `_RestoreGLStatues` 的 SDL3 分支用 `tTVPScreen::GetWidth/Height()`
+   （2048 方形逻辑尺寸）重设视口，TODO B4+ 接 SdlAppDelegate 真实窗口
+   尺寸（`gl` 上下文重建通知亦待 `setContextLostCallback` 落地，
+   SdlAppDelegate::dispatchRendererRecreated 已留 TODO 注释）。
+3. PVRTC 纹理在 SDL3 壳抛 Unsupported（解码器在 cocos2dx 库内）；
+   ETC/RGBA 等格式经本地 ogl/etcpak 等仍可用。
+4. `KRMovieLayer.cpp` 留在 core_movie_module 内仅靠"无引用方不拉取"
+   保证不破坏 SDL3 图；若后续 cocos/movie 侧接缝再变，需复核。
+5. `RenderManager.h` 仍保留 `namespace cocos2d { class Texture2D; }`
+   前向声明与 `GetAdapterTexture` 签名（cocos 侧适配半边）；SDL3 路径
+   的纹理适配由 cpp/core/render/KrkrTexture 承担，等 B4+ 渲染集成后
+   可考虑把该虚方法彻底撤出接口。

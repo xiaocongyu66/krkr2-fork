@@ -16,7 +16,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#include <cocos/platform/CCFileUtils.h>
+// B4: 替代原 <cocos/platform/CCFileUtils.h>。内置回退字体经环境层
+// IFileBackend 链读取：Android/iOS 上 CocosFileBackend 逐字转发
+// FileUtils::fullPathForFilename/isFileExist/getDataFromFile；桌面经
+// LocalFileBackend 走真实文件系统。
+#include "IFileBackend.h"
 #include "StorageImpl.h"
 #include "BinaryStream.h"
 
@@ -219,23 +223,25 @@ void TVPInitFontNames() {
             break;
 #endif
 
-        { // from internal storage
-            auto data = cocos2d::FileUtils::getInstance()->getDataFromFile(
-                "NotoSansCJK-Regular.ttc");
-            if(data.isNull()) {
+        { // from internal storage (bundled fallback font)
+            // B4: 经 IFileBackend 链读取内置字体（替代
+            // cocos2d::FileUtils::getDataFromFile）。找不到时保留原行为
+            // （critical + exit(-1)）。
+            auto stream =
+                TVPGetFileBackend()->OpenRead(ttstr("NotoSansCJK-Regular.ttc"));
+            if(!stream) {
                 G_CoreLog.critical("can't found internal font file!");
                 exit(-1);
             }
+            std::vector<FT_Byte> buf(static_cast<size_t>(stream->GetSize()));
+            stream->ReadBuffer(buf.data(), static_cast<tjs_uint>(buf.size()));
             if(TVPInternalEnumFonts(
-                   data.getBytes(), data.getSize(), "NotoSansCJK-Regular.ttc",
+                   buf.data(), static_cast<int>(buf.size()),
+                   "NotoSansCJK-Regular.ttc",
                    [](TVPFontNamePathInfo *info) -> tTJSBinaryStream * {
-                       auto data =
-                           cocos2d::FileUtils::getInstance()->getDataFromFile(
-                               info->Path.AsStdString());
-                       auto *ret = new tTVPMemoryStream();
-                       ret->WriteBuffer(data.getBytes(), data.getSize());
-                       ret->SetPosition(0);
-                       return ret;
+                       // 延迟重开，对应旧 FileUtils getter 的按需再读。
+                       auto reopen = TVPGetFileBackend()->OpenRead(info->Path);
+                       return reopen ? reopen.release() : nullptr;
                    }))
                 break;
         }

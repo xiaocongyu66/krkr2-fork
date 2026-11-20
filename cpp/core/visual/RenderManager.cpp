@@ -10,8 +10,10 @@
 #include "RenderManager.h"
 
 #include "MsgIntf.h"
+#if defined(KRKR2_BUILD_APP)
 #include "renderer/CCTexture2D.h"
 typedef cocos2d::Texture2D::PixelFormat CCPixelFormat;
+#endif
 #include "MsgIntf.h"
 #include "LayerBitmapIntf.h"
 #include "SysInitIntf.h"
@@ -366,6 +368,9 @@ public:
     }
     tjs_int GetPitch() const override { return Pitch; }
 
+    // B4: Texture2D 适配仅在 cocos 壳编译；非 cocos 配置回落到
+    // iTVPTexture2D 的默认实现（原样返回 origTex，无 cocos 适配调用方）。
+#if defined(KRKR2_BUILD_APP)
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         if(!origTex || origTex->getPixelsWide() != Width ||
@@ -380,6 +385,7 @@ public:
         }
         return origTex;
     }
+#endif
 
     size_t GetBitmapSize() override {
         return Pitch * Height * (Format == TVPTextureFormat::RGBA ? 4 : 1);
@@ -476,6 +482,8 @@ public:
         assert(0);
     }
 
+    // B4: KRKR2_BUILD_APP 门控，同 tTVPSoftwareTexture2D_static。
+#if defined(KRKR2_BUILD_APP)
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         GetPixelData();
@@ -491,6 +499,7 @@ public:
         }
         return origTex;
     }
+#endif
 };
 
 class tTVPSoftwareTexture2D_half : public tTVPSoftwareTexture2D_compress {
@@ -567,6 +576,8 @@ public:
         return 1;
     }
 
+    // B4: KRKR2_BUILD_APP 门控，同 tTVPSoftwareTexture2D_static。
+#if defined(KRKR2_BUILD_APP)
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         if(!origTex || origTex->getPixelsWide() != Width ||
@@ -584,6 +595,7 @@ public:
         }
         return origTex;
     }
+#endif
 
     tjs_uint GetInternalHeight() const override { return _scanline.size(); }
 
@@ -4836,9 +4848,11 @@ iTVPRenderManager *TVPGetRenderManager(const ttstr &name) {
 iTVPRenderManager *TVPGetRenderManager() {
     static iTVPRenderManager *_RenderManager;
     if(!_RenderManager) {
+        // B4: "renderer" 未配置时用宿主默认（cocos 壳 "software"，SDL3 壳
+        // "opengl" —— SDL3 壳没有 software renderer 的呈现管线）。
         ttstr str =
             IndividualConfigManager::GetInstance()->GetValue<std::string>(
-                "renderer", "software");
+                "renderer", TVPGetDefaultRendererName());
         _RenderManager = TVPGetRenderManager(str);
     }
     return _RenderManager;

@@ -8,9 +8,13 @@
 #include "ConfigManager/LocaleConfigManager.h"
 #include "PostUpdateEvent.h" // TVPInvokePostUpdateEvent
 #include "RenderManager.h" // iTVPTexture2D::RecycleProcess
+#include "SysInitIntf.h" // TVPGetDefaultRendererName host hook
 #include "TextInput.h" // krkr::input::decodeTextInput
+#include "TVPError.h" // TVPThrowExceptionMessage
 #include "TVPLog.h" // G_CoreLog / G_Tjs2Log
+#include "TVPMessages.h" // TVPErrorInKrMovieDLL
 #include "WindowImpl.h" // tTJSNI_Window, TVPGetCurrentShiftKeyState
+#include "krmovie.h" // iTVPVideoOverlay
 #include "tjsString.h" // ttstr
 #include "vkdefine.h" // VK_BACK
 
@@ -61,6 +65,66 @@ namespace TJS {
         G_Tjs2Log.info(str.AsStdString());
     }
 } // namespace TJS
+
+//---------------------------------------------------------------------------
+// Video overlay engine seam (krffmpeg.cpp declarations, VideoOvlImpl.cpp
+// call sites). The ffmpeg/cocos player objects (MoviePlayerOverlay /
+// MoviePlayerLayer) compile into core_movie_cocos, which the SDL3 link graph
+// excludes; the SDL3 shell cannot play movies yet, so every factory throws
+// the historical krmovie.dll failure with an SDL3-shell reason instead of
+// producing an unplayable object.
+//---------------------------------------------------------------------------
+class tTJSNI_VideoOverlay;
+struct IStream;
+
+void GetVideoOverlayObject(tTJSNI_VideoOverlay * /*callbackwin*/,
+                           IStream * /*stream*/,
+                           const tjs_char * /*streamname*/,
+                           const tjs_char * /*type*/, uint64_t /*size*/,
+                           iTVPVideoOverlay **out) {
+    *out = nullptr;
+    TVPThrowExceptionMessage(
+        TVPErrorInKrMovieDLL,
+        TJS_W("video playback is not available in the SDL3 shell yet"));
+}
+
+void GetVideoLayerObject(tTJSNI_VideoOverlay * /*callbackwin*/,
+                         IStream * /*stream*/, const tjs_char * /*streamname*/,
+                         const tjs_char * /*type*/, uint64_t /*size*/,
+                         iTVPVideoOverlay **out) {
+    *out = nullptr;
+    TVPThrowExceptionMessage(
+        TVPErrorInKrMovieDLL,
+        TJS_W("video playback is not available in the SDL3 shell yet"));
+}
+
+void GetMixingVideoOverlayObject(tTJSNI_VideoOverlay * /*callbackwin*/,
+                                 IStream * /*stream*/,
+                                 const tjs_char * /*streamname*/,
+                                 const tjs_char * /*type*/, uint64_t /*size*/,
+                                 iTVPVideoOverlay **out) {
+    *out = nullptr;
+    TVPThrowExceptionMessage(
+        TVPErrorInKrMovieDLL,
+        TJS_W("video playback is not available in the SDL3 shell yet"));
+}
+
+void GetMFVideoOverlayObject(tTJSNI_VideoOverlay * /*callbackwin*/,
+                             IStream * /*stream*/,
+                             const tjs_char * /*streamname*/,
+                             const tjs_char * /*type*/, uint64_t /*size*/,
+                             iTVPVideoOverlay **out) {
+    *out = nullptr;
+    TVPThrowExceptionMessage(
+        TVPErrorInKrMovieDLL,
+        TJS_W("video playback is not available in the SDL3 shell yet"));
+}
+
+// Host hook (B4, SysInitIntf.h): the SDL3 shell has no software-renderer
+// presentation path (no cocos scene graph consumes software textures), so
+// default to the OpenGL renderer. An explicit individual-config "renderer"
+// entry still wins.
+const char *TVPGetDefaultRendererName() { return "opengl"; }
 
 // Host hooks the cocoa host supplied via MainScene.cpp:1460-1512 and that
 // non-cocos engine code links against (GlobalConfigManager / Application /

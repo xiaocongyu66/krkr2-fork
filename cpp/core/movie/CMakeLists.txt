@@ -21,9 +21,7 @@ set(MOVIE_SOURCE_FILES
     ${MOVIE_PATH}/ffmpeg/FactoryCodec.cpp
     ${MOVIE_PATH}/ffmpeg/FFmpegInit.cpp
     ${MOVIE_PATH}/ffmpeg/InputStream.cpp
-    ${MOVIE_PATH}/ffmpeg/krffmpeg.cpp
     ${MOVIE_PATH}/ffmpeg/KRMovieLayer.cpp
-    ${MOVIE_PATH}/ffmpeg/KRMoviePlayer.cpp
     ${MOVIE_PATH}/ffmpeg/Message.cpp
     ${MOVIE_PATH}/ffmpeg/MessageQueue.cpp
     ${MOVIE_PATH}/ffmpeg/ProcessInfo.cpp
@@ -65,12 +63,34 @@ find_package(FFMPEG COMPONENTS
         swscale
         swresample REQUIRED
 )
-find_package(cocos2dx CONFIG REQUIRED)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${FFMPEG_INCLUDE_DIRS})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    cocos2dx::cocos2d
+target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
 
-    ${FFMPEG_LIBRARIES}
+# ---------------------------------------------------------------------------
+# cocos2d 后端源码（B4）。KRMoviePlayer.cpp 经 Cocos Node/Sprite 场景图呈现
+# 视频，krffmpeg.cpp 构造两侧 player 对象，二者都需要 cocos2dx 头与库；
+# 引擎接缝符号（GetVideoOverlayObject 等）的 SDL3 壳替代实现在
+# core_environ_sdl3。配置 KRKR2_BUILD_APP=OFF（krkr2_sdl3 专用配置）时整块
+# 跳过，movie 模块不引入 cocos2dx 依赖。
+# ---------------------------------------------------------------------------
+if(KRKR2_BUILD_APP)
+set(MOVIE_COCOS_SOURCE_FILES
+    ${MOVIE_PATH}/ffmpeg/KRMoviePlayer.cpp
+    ${MOVIE_PATH}/ffmpeg/krffmpeg.cpp
 )
+
+add_library(core_movie_cocos STATIC ${MOVIE_COCOS_SOURCE_FILES})
+# core_visual_module/core_sound_module 直接链接：KRMoviePlayer.cpp 经
+# flat-name 头引用 visual impl（WindowImpl/VideoOvlImpl）与
+# sound/win32（WaveMixer.h），PRIVATE 依赖不向上传递。
+target_link_libraries(core_movie_cocos PRIVATE core_movie_module core_visual_module core_sound_module)
+# KRMoviePlayer.cpp 经 flat-name 头引用 visual impl（WindowImpl/VideoOvlImpl）
+# 与 environ cocos2d 目录（CocosWindowAccess/YUVSprite）。
+krkr2_target_include_base_headers(core_movie_cocos)
+krkr2_target_include_environ_headers(core_movie_cocos)
+
+find_package(cocos2dx CONFIG REQUIRED)
+target_link_libraries(core_movie_cocos PRIVATE cocos2dx::cocos2d)
+endif() # KRKR2_BUILD_APP

@@ -167,6 +167,10 @@ target_link_libraries(core_environ_cocos PUBLIC
     core_plugin_module
     core_movie_module
     core_utils_module
+    # B4: ui/SimpleMediaFilePlayer 使用 KRMovie::VideoPresentOverlay2，
+    # MainFileSelectorForm 引用 TVPCheckIsVideoFile —— 两符号随
+    # KRMoviePlayer.cpp/krffmpeg.cpp 落在 core_movie_cocos。
+    core_movie_cocos
 )
 
 if(ANDROID OR IOS)
