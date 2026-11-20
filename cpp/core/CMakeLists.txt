@@ -26,6 +26,9 @@ add_subdirectory(sound)
 add_subdirectory(imageops)
 add_subdirectory(visual)
 add_subdirectory(utils)
+if(NOT KRKR2_BUILD_APP AND KRKR2_BUILD_SDL3_APP)
+    add_subdirectory(render)
+endif()
 
 # environ 为组合根：PUBLIC 链齐 foundation + base + domain
 # 核心 domain 静态库互相引用（依赖检查容许的既有 domain 环）。GNU ld 对
@@ -65,6 +68,7 @@ set(KRKR2_CORE_ARCHIVE_TARGETS
 set(KRKR2_CORE_ENVIRON_BACKEND core_environ_cocos)
 if(NOT KRKR2_BUILD_APP AND KRKR2_BUILD_SDL3_APP)
     set(KRKR2_CORE_ENVIRON_BACKEND core_environ_sdl3)
+    list(APPEND KRKR2_CORE_ARCHIVE_TARGETS core_render_module)
 endif()
 list(APPEND KRKR2_CORE_ARCHIVE_TARGETS ${KRKR2_CORE_ENVIRON_BACKEND})
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
@@ -77,6 +81,9 @@ else()
         ${KRKR2_CORE_ENVIRON_BACKEND}
         core_extension_module
     )
+    if(NOT KRKR2_BUILD_APP AND KRKR2_BUILD_SDL3_APP)
+        target_link_libraries(${PROJECT_NAME} INTERFACE core_render_module)
+    endif()
 endif()
 
 target_include_directories(${PROJECT_NAME} INTERFACE
