@@ -25,7 +25,7 @@
       ]
     },
     "sdl3-app": {
-      "description": "SDL3 application shell dependencies; mirrors the engine feature minus cocos2dx (vcpkg features cannot reference sibling features, so the list is duplicated -- keep both in sync)",
+      "description": "SDL3 application shell dependencies; mirrors the engine feature minus cocos2dx (vcpkg features cannot reference sibling features, so the list is duplicated -- keep both in sync). freetype/xxhash arrive transitively through cocos2dx in the app build, so they are listed here directly.",
       "dependencies": [
         "7zip",
         {
@@ -38,7 +38,9 @@
           "platform": "android"
         },
         "ffmpeg",
+        "freetype",
         "glm",
+        "glew",
         "jxrlib",
         "libarchive",
         "libxml2",
@@ -80,6 +82,7 @@
           "name": "vcpkg-cmake",
           "host": true
         },
+        "xxhash",
         "zstd",
         {
           "name": "dirent",
