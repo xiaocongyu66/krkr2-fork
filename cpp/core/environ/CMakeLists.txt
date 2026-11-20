@@ -53,6 +53,13 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     # linux/Platform.cpp wraps its platform glue in #ifdef LINUX; pre-split
     # this define leaked in from the cocos2dx usage requirements.
     $<$<BOOL:${LINUX}>:LINUX>)
+if(LINUX)
+    # The GTK dialog in linux/Platform.cpp previously got gtk/gtk.h through
+    # the cocos2dx usage requirements; the split removed that path.
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+    target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::GTK3)
+endif()
 target_include_directories(${PROJECT_NAME} PUBLIC ${ENVIRON_HEADERS_DIR})
 
 # 组合根：对外 PUBLIC 链齐运行时栈（foundation + base + domain）
