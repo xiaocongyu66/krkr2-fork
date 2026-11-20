@@ -4,6 +4,7 @@
 #include "EventIntf.h" // TVPPostInputEvent, TVPDeliverWindowUpdateEvents
 #include "WindowIntf.h" // input event classes
 #include "InputState.h" // krkr::input::sharedState()
+#include "InputCancellation.h" // krkr::input::mouseKeyButton, planInputCancellation
 #include "InputModifiers.h" // krkr::input::key::*, legacyShiftFlags
 #include "PointerCoordinates.h" // krkr::input::pointerPixel
 #include "Random.h" // TVPPushEnvironNoise
@@ -23,6 +24,8 @@ namespace krkr::sdl3 {
     SdlWindowLayer *SdlWindowLayer::currentWindowLayer = nullptr;
     tjs_int SdlWindowLayer::sharedViewWidth = 0;
     tjs_int SdlWindowLayer::sharedViewHeight = 0;
+    SdlWindowLayer::ImeModeListener SdlWindowLayer::imeModeListener;
+    std::function<float()> SdlWindowLayer::DpiProvider;
 
     SdlWindowLayer::SdlWindowLayer(tTJSNI_Window *window) :
         nativeWindow(window) {
@@ -53,8 +56,7 @@ namespace krkr::sdl3 {
         while(another &&
               (another == this || !another->Visible || !another->nativeWindow))
             another = another->prevWindow;
-        SetCurrentWindow(another);
-        // UpdateImeMode equivalent belongs to the B2-2 SdlIMEDelegate wiring.
+        SetCurrentWindow(another); // notifyImeMode() runs inside (B2-2).
     }
 
     void SdlWindowLayer::SetCurrentWindow(SdlWindowLayer *window) {
@@ -62,6 +64,27 @@ namespace krkr::sdl3 {
            currentWindowLayer->nativeWindow)
             currentWindowLayer->nativeWindow->OnReleaseCapture();
         currentWindowLayer = window;
+        // TVPWindow.cpp:482: the current window owns the shared IME state.
+        notifyImeMode();
+    }
+
+    void SdlWindowLayer::SetImeModeListener(ImeModeListener listener) {
+        imeModeListener = std::move(listener);
+    }
+
+    void SdlWindowLayer::SetDpiProvider(std::function<float()> provider) {
+        DpiProvider = std::move(provider);
+    }
+
+    void SdlWindowLayer::notifyImeMode() {
+        // TVPWindow.cpp:423-452 UpdateImeMode: the current window's mode
+        // decides the host text-input state; imDisable/imClose detach.
+        const auto *cur = currentWindowLayer;
+        const bool enabled = cur &&
+            cur->LastSetImeMode != tTVPImeMode::imDisable &&
+            cur->LastSetImeMode != tTVPImeMode::imClose;
+        if(imeModeListener)
+            imeModeListener(enabled);
     }
 
     void SdlWindowLayer::SetSharedViewSize(tjs_int width, tjs_int height) {
@@ -178,10 +201,12 @@ namespace krkr::sdl3 {
     }
 
     std::uint32_t SdlWindowLayer::touchMoveThresholdSq() const {
-        // TVPMainScene::create sets TVPWindowLayer::_touchMoveThresholdSq from
-        // Device::getDPI()/10 (MainScene.cpp:539-542); the iWindowLayer default
-        // threshold stands in until the Shell-side DPI wiring (B2-2).
-        const float threshold = static_cast<float>(TouchScaleThreshold);
+        // TVPMainScene::create set TVPWindowLayer::_touchMoveThresholdSq from
+        // Device::getDPI()/10 (MainScene.cpp:539-542). The shell supplies the
+        // SDL display DPI (SdlAppDelegate::getDPI); 96dpi keeps the default
+        // geometry until the runner installs the provider.
+        const float dpi = DpiProvider ? DpiProvider() : 96.f;
+        const float threshold = dpi / 10.f;
         return static_cast<std::uint32_t>(threshold * threshold);
     }
 
@@ -388,20 +413,53 @@ namespace krkr::sdl3 {
         }
     }
 
-    void SdlWindowLayer::postSyntheticMouseUp(std::uint32_t key) {
+    void
+    SdlWindowLayer::cancelInput(const std::vector<std::uint32_t> &released) {
+        // TVPWindow.cpp:346-389 port. Deduplicate the released keys through
+        // planInputCancellation so one held key generates exactly one up,
+        // emulated mouse-key presses collapse into pointer ups, and
+        // untranslated mouse-key keys never receive a bogus up.
+        auto keys = released;
+        if(touchButton.pressed())
+            keys.push_back(touchButton.value());
+        const auto plan = krkr::input::planInputCancellation(
+            keys,
+            { UseMouseKey, MouseLeftButtonEmulatedPushed,
+              MouseRightButtonEmulatedPushed });
+
+        for(auto fingerId : touchFingers)
+            touchVelocityTracker.end(static_cast<tjs_int>(fingerId));
+        touchFingers.clear();
+        touchButton.reset();
+        touchMoved = false;
+        mouseVelocityTracker.clear();
+        MouseLeftButtonEmulatedPushed = false;
+        MouseRightButtonEmulatedPushed = false;
+        MouseKeyXAccel = 0;
+        MouseKeyYAccel = 0;
+        LastMouseMoved = false;
+
         if(!nativeWindow)
             return;
-        if(key != krkr::input::key::leftMouse &&
-           key != krkr::input::key::rightMouse &&
-           key != krkr::input::key::middleMouse)
-            return;
-        // Cancellation up, mirroring the TVPWindowLayer::CancelInput posting
-        // (TVPWindow.cpp:384-387) and SdlPointerInput::focusRelease
-        // (SdlPointerInput.cpp:107-114).
-        TVPPostInputEvent(new tTVPOnMouseUpInputEvent(
-            nativeWindow, LastMouseX, LastMouseY, MouseButtonForKey(key),
-            currentShiftState(),
-            /*cancellation=*/true));
+
+        // Do not route through OnKeyUp: mouse-key release can generate a click
+        // there. Direct posts also avoid consuming unread press markers via
+        // GetMouseButtonState(). Pointer-only cancellation keeps keyboard
+        // modifiers.
+        const auto shift =
+            krkr::input::legacyShiftFlags(krkr::input::sharedState());
+        for(auto button : plan.pointerUps) {
+            // The emulated button is released state-side here; the cocos host
+            // never pressed it into the shared state (TVPWindow.cpp:675-688),
+            // but this host derives shift state from krkr::input::sharedState.
+            krkr::input::sharedState().release(button);
+            TVPPostInputEvent(new tTVPOnMouseUpInputEvent(
+                nativeWindow, LastMouseX, LastMouseY, MouseButtonForKey(button),
+                shift, /*cancellation=*/true));
+        }
+        for(auto key : plan.keyUps)
+            TVPPostInputEvent(
+                new tTVPOnKeyUpInputEvent(nativeWindow, key, shift));
     }
 
     void SdlWindowLayer::cancelPointerInput() {
@@ -414,6 +472,118 @@ namespace krkr::sdl3 {
         touchButton.reset();
         touchMoved = false;
         mouseVelocityTracker.clear();
+    }
+
+    //---------------------------------------------------------------------------
+    // UseMouseKey emulation, TVPWindow.cpp:698-837 port. The emulated cursor
+    // moves in the same primary-layer space as LastMouseX/Y; press emulation
+    // additionally tracks the button through the shared key state so shift
+    // flags (this host derives them from krkr::input::sharedState) and
+    // cancellation dedupe cover the emulated presses.
+    //---------------------------------------------------------------------------
+    void SdlWindowLayer::emulatedMouseDown(std::uint32_t button) {
+        if(!nativeWindow)
+            return;
+        krkr::input::sharedState().press(button);
+        TVPPostInputEvent(new tTVPOnMouseDownInputEvent(
+            nativeWindow, LastMouseX, LastMouseY, MouseButtonForKey(button),
+            currentShiftState()));
+    }
+
+    void SdlWindowLayer::emulatedMouseUp(std::uint32_t button) {
+        krkr::input::sharedState().release(button);
+        if(!nativeWindow)
+            return;
+        TVPPostInputEvent(new tTVPOnMouseUpInputEvent(
+            nativeWindow, LastMouseX, LastMouseY, MouseButtonForKey(button),
+            currentShiftState()));
+    }
+
+    void SdlWindowLayer::GenerateMouseEvent(bool fl, bool fr, bool fu,
+                                            bool fd) {
+        // TVPWindow.cpp:698-777: idle ticks are throttled to 45ms, movement
+        // uses an accelerating ramp driven by the shared key state.
+        if(!fl && !fr && !fu && !fd) {
+            if(TVPGetRoughTickCount32() - 45 < LastMouseKeyTick)
+                return;
+        }
+
+        const bool shift =
+            0 != (krkr::input::sharedState().query(VK_SHIFT, true));
+        const bool left = fl ||
+            krkr::input::sharedState().query(VK_LEFT, true) ||
+            krkr::input::sharedState().query(VK_PADLEFT, true);
+        const bool right = fr ||
+            krkr::input::sharedState().query(VK_RIGHT, true) ||
+            krkr::input::sharedState().query(VK_PADRIGHT, true);
+        const bool up = fu || krkr::input::sharedState().query(VK_UP, true) ||
+            krkr::input::sharedState().query(VK_PADUP, true);
+        const bool down = fd ||
+            krkr::input::sharedState().query(VK_DOWN, true) ||
+            krkr::input::sharedState().query(VK_PADDOWN, true);
+
+        const bool flags = left || right || up || down;
+
+        if(!right && !left && !up && !down) {
+            LastMouseMoved = false;
+            MouseKeyXAccel = 0;
+            MouseKeyYAccel = 0;
+        }
+
+        if(!shift) {
+            if(!right && left && MouseKeyXAccel > 0)
+                MouseKeyXAccel = 0;
+            if(!left && right && MouseKeyXAccel < 0)
+                MouseKeyXAccel = 0;
+            if(!down && up && MouseKeyYAccel > 0)
+                MouseKeyYAccel = 0;
+            if(!up && down && MouseKeyYAccel < 0)
+                MouseKeyYAccel = 0;
+        } else {
+            if(left)
+                MouseKeyXAccel = -TVP_MOUSE_SHIFT_ACCEL;
+            if(right)
+                MouseKeyXAccel = TVP_MOUSE_SHIFT_ACCEL;
+            if(up)
+                MouseKeyYAccel = -TVP_MOUSE_SHIFT_ACCEL;
+            if(down)
+                MouseKeyYAccel = TVP_MOUSE_SHIFT_ACCEL;
+        }
+
+        if(right || left || up || down) {
+            if(left)
+                if(MouseKeyXAccel > -TVP_MOUSE_MAX_ACCEL)
+                    MouseKeyXAccel = MouseKeyXAccel ? MouseKeyXAccel - 2 : -2;
+            if(right)
+                if(MouseKeyXAccel < TVP_MOUSE_MAX_ACCEL)
+                    MouseKeyXAccel = MouseKeyXAccel ? MouseKeyXAccel + 2 : +2;
+            if(!left && !right) {
+                if(MouseKeyXAccel > 0)
+                    MouseKeyXAccel--;
+                else if(MouseKeyXAccel < 0)
+                    MouseKeyXAccel++;
+            }
+
+            if(up)
+                if(MouseKeyYAccel > -TVP_MOUSE_MAX_ACCEL)
+                    MouseKeyYAccel = MouseKeyYAccel ? MouseKeyYAccel - 2 : -2;
+            if(down)
+                if(MouseKeyYAccel < TVP_MOUSE_MAX_ACCEL)
+                    MouseKeyYAccel = MouseKeyYAccel ? MouseKeyYAccel + 2 : +2;
+            if(!up && !down) {
+                if(MouseKeyYAccel > 0)
+                    MouseKeyYAccel--;
+                else if(MouseKeyYAccel < 0)
+                    MouseKeyYAccel++;
+            }
+        }
+
+        if(flags) {
+            LastMouseX += MouseKeyXAccel >> 1;
+            LastMouseY += MouseKeyYAccel >> 1;
+            LastMouseMoved = true;
+        }
+        LastMouseKeyTick = TVPGetRoughTickCount32();
     }
 
     //---------------------------------------------------------------------------
@@ -663,30 +833,116 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::InternalKeyDown(tjs_uint16 key, tjs_uint32 shift) {
-        // TVPWindow.cpp:779-786 noise seeding.
+        // TVPWindow.cpp:779-837 port.
         tjs_uint32 tick = TVPGetRoughTickCount32();
         TVPPushEnvironNoise(&tick, sizeof(tick));
         TVPPushEnvironNoise(&key, sizeof(key));
         TVPPushEnvironNoise(&shift, sizeof(shift));
-        // TODO(B2-2): UseMouseKey emulation (TVPWindow.cpp:790-837) — emulated
-        // mouse downs from Return/Space/Pad1 and Escape/Pad2, plus cursor
-        // motion on the arrows, belongs to the shell input policy port.
+
+        if(UseMouseKey) {
+            // Return/Space/Pad1 and Escape/Pad2 emulate pointer buttons
+            // (krkr::input::mouseKeyButton), but only while the emulated
+            // cursor stays inside the layer (TVPWindow.cpp:785-801).
+            if(const auto button = krkr::input::mouseKeyButton(key)) {
+                // Repeats are intentional (TVPWindow.cpp:790-798 sets the flag
+                // and posts unconditionally on every keydown), matching the
+                // Win32 host's repeated emulated presses on a held key.
+                if(LastMouseX >= 0 && LastMouseY >= 0 &&
+                   LastMouseX < LayerWidth && LastMouseY < LayerHeight) {
+                    if(button == krkr::input::key::leftMouse) {
+                        MouseLeftButtonEmulatedPushed = true;
+                        emulatedMouseDown(button);
+                    }
+                    if(button == krkr::input::key::rightMouse) {
+                        MouseRightButtonEmulatedPushed = true;
+                        emulatedMouseDown(button);
+                    }
+                }
+                return;
+            }
+
+            // Arrows and the D-pad move the emulated cursor; the initial kick
+            // also arms the 100ms repeat delay (TVPWindow.cpp:803-833).
+            switch(key) {
+                case VK_LEFT:
+                case VK_PADLEFT:
+                    if(MouseKeyXAccel == 0 && MouseKeyYAccel == 0) {
+                        GenerateMouseEvent(true, false, false, false);
+                        LastMouseKeyTick = TVPGetRoughTickCount32() + 100;
+                    }
+                    return;
+                case VK_RIGHT:
+                case VK_PADRIGHT:
+                    if(MouseKeyXAccel == 0 && MouseKeyYAccel == 0) {
+                        GenerateMouseEvent(false, true, false, false);
+                        LastMouseKeyTick = TVPGetRoughTickCount32() + 100;
+                    }
+                    return;
+                case VK_UP:
+                case VK_PADUP:
+                    if(MouseKeyXAccel == 0 && MouseKeyYAccel == 0) {
+                        GenerateMouseEvent(false, false, true, false);
+                        LastMouseKeyTick = TVPGetRoughTickCount32() + 100;
+                    }
+                    return;
+                case VK_DOWN:
+                case VK_PADDOWN:
+                    if(MouseKeyXAccel == 0 && MouseKeyYAccel == 0) {
+                        GenerateMouseEvent(false, false, false, true);
+                        LastMouseKeyTick = TVPGetRoughTickCount32() + 100;
+                    }
+                    return;
+                default:
+                    break;
+            }
+        }
+
         if(nativeWindow)
             TVPPostInputEvent(
                 new tTVPOnKeyDownInputEvent(nativeWindow, key, shift));
     }
 
     void SdlWindowLayer::OnKeyUp(tjs_uint16 vk, int shift) {
-        // TVPWindow.h:253-257: OR the live mouse-button state, then post.
+        // TVPWindow.h:253-257 + TVPWindow.cpp:839-875 (mouse-key release).
         tjs_uint32 s = shift;
         s |= GetMouseButtonState();
-        if(nativeWindow) {
-            tjs_uint32 tick = TVPGetRoughTickCount32();
-            TVPPushEnvironNoise(&tick, sizeof(tick));
-            TVPPushEnvironNoise(&vk, sizeof(vk));
-            TVPPushEnvironNoise(&s, sizeof(s));
-            TVPPostInputEvent(new tTVPOnKeyUpInputEvent(nativeWindow, vk, s));
+        tjs_uint32 tick = TVPGetRoughTickCount32();
+        TVPPushEnvironNoise(&tick, sizeof(tick));
+        TVPPushEnvironNoise(&vk, sizeof(vk));
+        TVPPushEnvironNoise(&s, sizeof(s));
+        if(!nativeWindow)
+            return;
+
+        if(UseMouseKey) {
+            if(const auto button = krkr::input::mouseKeyButton(vk)) {
+                // Pressed in another window, or cancelled -- no release here
+                // (TVPWindow.cpp:846-852).
+                if((button == krkr::input::key::leftMouse &&
+                    !MouseLeftButtonEmulatedPushed) ||
+                   (button == krkr::input::key::rightMouse &&
+                    !MouseRightButtonEmulatedPushed))
+                    return;
+                if(LastMouseX >= 0 && LastMouseY >= 0 &&
+                   LastMouseX < LayerWidth && LastMouseY < LayerHeight) {
+                    if(button == krkr::input::key::leftMouse) {
+                        // Emulated left release fires a click pair
+                        // (TVPWindow.cpp:858-866); the click lands at the
+                        // cursor because no motion separates press and
+                        // release.
+                        MouseLeftButtonEmulatedPushed = false;
+                        TVPPostInputEvent(new tTVPOnClickInputEvent(
+                            nativeWindow, LastMouseX, LastMouseY));
+                        emulatedMouseUp(button);
+                    } else {
+                        MouseRightButtonEmulatedPushed = false;
+                        emulatedMouseUp(button);
+                    }
+                }
+                return;
+            }
         }
+
+        TVPPostInputEvent(new tTVPOnKeyUpInputEvent(nativeWindow, vk, s));
     }
 
     void SdlWindowLayer::OnKeyPress(tjs_uint16 vk, int repeat,
@@ -713,13 +969,13 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::SetImeMode(tTVPImeMode mode) {
-        // TVPWindow.cpp:413-419: imDontCare keeps the last concrete mode.
+        // TVPWindow.cpp:413-421: imDontCare keeps the last concrete mode, and
+        // only the current window reaches the host IME state.
         if(mode == tTVPImeMode::imDontCare)
             return;
         LastSetImeMode = mode;
-        // The cocos host mapped the mode onto the shared IMEDelegate here
-        // (TVPWindow.cpp:421-452). B2-2 maps it onto SdlIMEDelegate +
-        // SdlAppDelegate::setTextInputEnabled when the current window changes.
+        if(currentWindowLayer == this)
+            notifyImeMode();
     }
 
     void SdlWindowLayer::ResetImeMode() { SetImeMode(DefaultImeMode); }
@@ -743,9 +999,22 @@ namespace krkr::sdl3 {
     void SdlWindowLayer::SetUseMouseKey(bool b) {
         // TVPWindow.cpp:1018-1036.
         UseMouseKey = b;
-        // TODO(B2-2): on switch-off, release emulated mouse buttons
-        // (TVPWindow.cpp:1024-1033) once InternalKeyDown's mouse-key path
-        // exists.
+        if(b) {
+            MouseLeftButtonEmulatedPushed = false;
+            MouseRightButtonEmulatedPushed = false;
+            LastMouseKeyTick = TVPGetRoughTickCount32();
+        } else {
+            // Release emulated buttons so a stuck press cannot survive the
+            // mode switch.
+            if(MouseLeftButtonEmulatedPushed) {
+                MouseLeftButtonEmulatedPushed = false;
+                emulatedMouseUp(krkr::input::key::leftMouse);
+            }
+            if(MouseRightButtonEmulatedPushed) {
+                MouseRightButtonEmulatedPushed = false;
+                emulatedMouseUp(krkr::input::key::rightMouse);
+            }
+        }
     }
 
     bool SdlWindowLayer::GetUseMouseKey() const { return UseMouseKey; }
@@ -767,8 +1036,11 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::TickBeat() {
-        // TVPWindow.cpp:391-395 generates mouse-key cursor ticks; needs the
-        // mouse-key emulation path (B2-2).
+        // TVPWindow.cpp:391-395: pump the emulated cursor while arrows are
+        // held. The engine drives this from SystemWatchTimerTimer
+        // (Application->Run() inside the SDL frame callback).
+        if(UseMouseKey && currentWindowLayer == this)
+            GenerateMouseEvent(false, false, false, false);
     }
 
     void SdlWindowLayer::toggleFillScale() {

@@ -24,6 +24,7 @@
 #include "VelocityTracker.h" // core/utils
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -69,9 +70,11 @@ namespace krkr::sdl3 {
         void onFingerMove(std::uint32_t fingerId, float windowX, float windowY);
         void onFingerUp(std::uint32_t fingerId, float windowX, float windowY);
 
-        // Focus-loss path (SdlAppDelegate::cancelInputOnFocusLoss): post a
-        // cancellation mouse-up for a held mouse VK, no state change.
-        void postSyntheticMouseUp(std::uint32_t key);
+        // Focus-loss path (SdlAppDelegate::cancelInputOnFocusLoss): deduplicate
+        // the released keys through krkr::input::planInputCancellation, reset
+        // in-flight gesture/mouse-key state, then post the resulting
+        // cancellation ups. TVPWindow.cpp:346-389 port.
+        void cancelInput(const std::vector<std::uint32_t> &released);
 
         // Reset in-flight touch/bookkeeping state without events, mirroring
         // TVPMainScene::CancelPointerInput(notifyWindow=false).
@@ -81,6 +84,23 @@ namespace krkr::sdl3 {
         static SdlWindowLayer *GetCurrentWindowLayer() {
             return currentWindowLayer;
         }
+
+        // --- shell bridges (installed by SdlEngineRunner)
+        // -------------------------------------------------
+        // The layer cannot see SDL; the runner installs these so engine-side
+        // state changes reach the shell.
+
+        // TVPWindow.cpp:423-452 UpdateImeMode role: whenever the current
+        // window or its IME mode changes, the engine tells the host whether
+        // text input must stay open. Maps imDisable/imClose to false.
+        using ImeModeListener = std::function<void(bool textInputEnabled)>;
+        static void SetImeModeListener(ImeModeListener listener);
+
+        // Touch threshold seeding: TVPMainScene::create derived
+        // _touchMoveThresholdSq from Device::getDPI() (MainScene.cpp:539-542);
+        // the shell supplies the SDL display DPI (SdlAppDelegate::getDPI,
+        // 96 * SDL_GetWindowDisplayScale).
+        static void SetDpiProvider(std::function<float()> provider);
 
         // --- iWindowLayer (cpp/core/visual/WindowLayer.h)
         // ----------------------
@@ -156,6 +176,15 @@ namespace krkr::sdl3 {
         static tTVPMouseButton MouseButtonForKey(std::uint32_t key);
         std::uint32_t touchMoveThresholdSq() const;
 
+        // UseMouseKey emulation (TVPWindow.cpp:698-837 port): arrows move an
+        // emulated cursor with acceleration, Return/Space/Pad1 and
+        // Escape/Pad2 emulate left/right clicks inside the layer bounds.
+        void GenerateMouseEvent(bool fl, bool fr, bool fu, bool fd);
+        void emulatedMouseDown(std::uint32_t button);
+        void emulatedMouseUp(std::uint32_t button);
+        // Shell bridge dispatch (see SetImeModeListener).
+        static void notifyImeMode();
+
         tTJSNI_Window *nativeWindow;
 
         std::string caption;
@@ -194,12 +223,25 @@ namespace krkr::sdl3 {
         tTVPImeMode DefaultImeMode = tTVPImeMode::imDisable;
         tjs_int textInputPosY = 0; // SetAttentionPoint feed for the IME area
 
+        // UseMouseKey emulation state (TVPWindow.h:42-43 for the constants).
+        bool MouseLeftButtonEmulatedPushed = false;
+        bool MouseRightButtonEmulatedPushed = false;
+        bool LastMouseMoved = false;
+        tjs_uint32 LastMouseKeyTick = 0;
+        tjs_int MouseKeyXAccel = 0, MouseKeyYAccel = 0;
+        static constexpr int TVP_MOUSE_MAX_ACCEL = 30;
+        static constexpr int TVP_MOUSE_SHIFT_ACCEL = 40;
+
         // window chain (TVPWindowLayer::_lastWindowLayer/_currentWindowLayer)
         SdlWindowLayer *prevWindow = nullptr;
         SdlWindowLayer *nextWindow = nullptr;
         static SdlWindowLayer *lastWindowLayer;
         static SdlWindowLayer *currentWindowLayer;
         static tjs_int sharedViewWidth, sharedViewHeight;
+
+        // Shell bridges (installed by SdlEngineRunner).
+        static ImeModeListener imeModeListener;
+        static std::function<float()> DpiProvider;
     };
 
 } // namespace krkr::sdl3

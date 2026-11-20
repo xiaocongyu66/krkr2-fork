@@ -33,6 +33,13 @@ option(KRKR2_BUILD_SDL3_APP "Build the SDL3 application shell module alongside t
 if(KRKR2_BUILD_SDL3_APP AND (ANDROID OR IOS))
     message(FATAL_ERROR "The SDL3 application shell is desktop-only for now")
 endif()
+if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP AND KRKR2_USE_COCOS_UI)
+    # The SDL3 shell executable cannot link the Cocos management UI
+    # (core_environ_cocos); build it as a pure desktop CLI whose launch
+    # arguments are enforced by krkr::launch::PrepareDesktopLaunch.
+    set(KRKR2_USE_COCOS_UI OFF)
+    message(STATUS "KRKR2_BUILD_SDL3_APP without KRKR2_BUILD_APP: forcing KRKR2_USE_COCOS_UI=OFF (no Cocos UI in the SDL3 shell)")
+endif()
 option(ENABLE_TESTS "Build engine tests (desktop only)" ON)
 option(BUILD_TOOLS "Build command-line tools (desktop only)" ON)
 if(KRKR2_ENABLE_UI_TEST_DRIVER AND (NOT KRKR2_BUILD_APP OR NOT ENABLE_TESTS))
@@ -48,10 +55,10 @@ option(KRKR2_ENABLE_CRASH_UPLOAD "Build optional crash report upload" OFF)
 
 # vcpkg installs dependencies during project(), before targets are configured.
 set(VCPKG_MANIFEST_NO_DEFAULT_FEATURES ON)
-if(KRKR2_BUILD_APP OR KRKR2_BUILD_SDL3_PROTOTYPE OR BUILD_TOOLS OR (ENABLE_TESTS AND NOT KRKR2_TEST_SCOPE MATCHES "^(imageops|launch|platform)$"))
+if(KRKR2_BUILD_APP OR KRKR2_BUILD_SDL3_APP OR KRKR2_BUILD_SDL3_PROTOTYPE OR BUILD_TOOLS OR (ENABLE_TESTS AND NOT KRKR2_TEST_SCOPE MATCHES "^(imageops|launch|platform)$"))
     list(APPEND VCPKG_MANIFEST_FEATURES foundation)
 endif()
-if(KRKR2_BUILD_APP OR (ENABLE_TESTS AND KRKR2_TEST_SCOPE STREQUAL "full"))
+if(KRKR2_BUILD_APP OR KRKR2_BUILD_SDL3_APP OR (ENABLE_TESTS AND KRKR2_TEST_SCOPE STREQUAL "full"))
     list(APPEND VCPKG_MANIFEST_FEATURES engine)
     if(KRKR2_ENABLE_PSD)
         list(APPEND VCPKG_MANIFEST_FEATURES psd)
@@ -106,7 +113,9 @@ if(MSVC)
 endif()
 
 # A tools-only configuration never enters the engine dependency graph.
-if(NOT KRKR2_BUILD_APP AND (NOT ENABLE_TESTS OR NOT KRKR2_TEST_SCOPE STREQUAL "full"))
+# The SDL3 application shell needs the full engine module graph, so it stays
+# out of the minimal path (KRKR2_BUILD_SDL3_APP only takes the full path).
+if(NOT KRKR2_BUILD_APP AND NOT KRKR2_BUILD_SDL3_APP AND (NOT ENABLE_TESTS OR NOT KRKR2_TEST_SCOPE STREQUAL "full"))
     if((NOT BUILD_TOOLS AND NOT ENABLE_TESTS AND NOT KRKR2_BUILD_SDL3_PROTOTYPE) OR ANDROID OR IOS)
         message(FATAL_ERROR "No supported build targets selected")
     endif()
@@ -270,6 +279,41 @@ if(KRKR2_BUILD_APP)
     endif()
 
 endif() # KRKR2_BUILD_APP
+
+# ---------------------------------------------------------------------------
+# krkr2_sdl3: SDL3 桌面壳可执行目标。与 cocos 应用互斥（两套壳各自实现
+# TVPCreateAndAddWindow 等宿主钩子，不能同图链接）；KRKR2_BUILD_APP=ON 而
+# KRKR2_BUILD_SDL3_APP=ON 时只编译 core_environ_sdl3 库做语法验证。
+# ---------------------------------------------------------------------------
+if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP)
+    set(KRKR2_SDL3_TARGET krkr2_sdl3)
+    add_executable(${KRKR2_SDL3_TARGET}
+        ${KRKR2CORE_PATH}/environ/sdl3/main.cpp
+    )
+    target_link_libraries(${KRKR2_SDL3_TARGET} PRIVATE krkr2core)
+    set_target_properties(${KRKR2_SDL3_TARGET} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${KRKR2_SDL3_TARGET}"
+    )
+
+    # Runtime resources: the same python sync the cocos app uses, without the
+    # cocos resource helpers (cocos_mark_resources is a Cocos-only flow).
+    set(GAME_RES_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    include(cmake/RuntimeAssets.cmake)
+    if(LINUX OR WINDOWS)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_custom_target(SYNC_RESOURCE-${KRKR2_SDL3_TARGET} ALL
+            COMMAND ${CMAKE_COMMAND} -E echo "Copying resources for ${KRKR2_SDL3_TARGET} ...")
+        add_dependencies(${KRKR2_SDL3_TARGET} SYNC_RESOURCE-${KRKR2_SDL3_TARGET})
+        add_custom_command(TARGET SYNC_RESOURCE-${KRKR2_SDL3_TARGET} POST_BUILD
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/sync_runtime_assets.py"
+                --source "${GAME_RES_FOLDER}"
+                --destination "$<TARGET_PROPERTY:${KRKR2_SDL3_TARGET},RUNTIME_OUTPUT_DIRECTORY>/${CMAKE_CFG_INTDIR}/Resources"
+                --all "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-sdl3-all.txt"
+                --selected "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-sdl3-selected.txt"
+            VERBATIM)
+        target_sources(${KRKR2_SDL3_TARGET} PRIVATE ${common_res_files})
+    endif()
+endif()
 
 if(KRKR2_BUILD_SDL3_PROTOTYPE)
     add_subdirectory(tools/sdl3-prototype)

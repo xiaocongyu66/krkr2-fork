@@ -32,9 +32,9 @@ namespace krkr::sdl3 {
     // IME bridge for SDL_EVENT_TEXT_INPUT / SDL_EVENT_TEXT_EDITING.
     // The engine-side adapter -- insertText -> decodeTextInput ->
     // per-UTF-16-unit Window.OnKeyPress, deleteBackward -> VK_BACK down/up --
-    // exists on the cocos host as MainScene's IMEDelegate (MainScene.cpp:1278,
-    // :1291). Wiring that adapter to this interface is B2-2; the shell only
-    // defines and calls it.
+    // mirrors MainScene's IMEDelegate (MainScene.cpp:1278, :1291) and is
+    // implemented by SdlEngineRunner::EngineIME; the shell only defines and
+    // calls it.
     class SdlIMEDelegate {
     public:
         virtual ~SdlIMEDelegate() = default;
@@ -81,7 +81,9 @@ namespace krkr::sdl3 {
         // --- engine hooks
         // -----------------------------------------------------
 
-        // Engine frame driver; install the Application->Run() equivalent here.
+        // Engine frame driver; SdlEngineRunner installs
+        // []{ ::Application->Run(); } here (the MainScene.cpp:747-748 frame
+        // equivalent).
         using FrameCallback = std::function<void()>;
         void setFrameCallback(FrameCallback callback);
 
@@ -101,8 +103,9 @@ namespace krkr::sdl3 {
         void setContextLostCallback(ContextLostCallback callback);
         [[nodiscard]] ContextLostCallback getContextLostCallback() const;
 
-        // IME: starts/stops SDL text input on the shell window. The engine-side
-        // IME mode switch (SetImeMode) calls into this once B2-2 lands.
+        // IME: starts/stops SDL text input on the shell window. Driven by the
+        // engine-side IME-mode bridge installed via
+        // SdlWindowLayer::SetImeModeListener (SdlEngineRunner wires it).
         void setTextInputEnabled(bool enabled);
 
         void setIMEDelegate(SdlIMEDelegate *delegate);
@@ -110,6 +113,9 @@ namespace krkr::sdl3 {
 
         // --- DPI / size queries (replace cocos2d::Device::getDPI,
         // MainScene.cpp:540 touch threshold and :832 UI scaling)
+        // SdlEngineRunner hands this to SdlWindowLayer::SetDpiProvider, which
+        // seeds the touch threshold the same way TVPMainScene::create did
+        // (MainScene.cpp:539-542).
         // ---------------
 
         // SDL_GetWindowDisplayScale: content scale, 1.0 == baseline density.
@@ -135,8 +141,9 @@ namespace krkr::sdl3 {
         void onHostForeground();
         void onHostBackground();
         // Focus loss: synthesize key/pointer releases first, then tell the
-        // engine. Mirrors the InputCancellation semantics of the cocos host
-        // (krkr::input::planInputCancellation, InputCancellation.h).
+        // engine. The layer-side half runs through
+        // krkr::input::planInputCancellation (InputCancellation.h), mirroring
+        // TVPWindowLayer::CancelInput semantics.
         void cancelInputOnFocusLoss();
 
         // Context-lost plumbing (see setContextLostCallback). Both perform

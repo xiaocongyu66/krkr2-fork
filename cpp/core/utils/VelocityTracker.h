@@ -20,6 +20,10 @@
  * 時間はms単位に変更。
  */
 
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+
 #ifndef _LIBINPUT_VELOCITY_TRACKER_H
 #define _LIBINPUT_VELOCITY_TRACKER_H
 

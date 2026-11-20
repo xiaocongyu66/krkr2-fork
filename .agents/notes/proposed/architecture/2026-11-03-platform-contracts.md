@@ -126,3 +126,35 @@ Android 编码桥的标准 UTF-8 转换、打印键去重与退格接线也已�
 14 项 Framework/ART/JNI 契约通过，共享平台范围随后增至 34 项，见
 [验证记录](../../implemented/testing/2026-11-05-android-input-contracts.md)。
 提交文本或独立桥测试不等于 IME 组合验收；完整 Android 游戏 APK、TJS 回调、物理设备及生命周期仍保留独立调查。
+
+## B2-2：krkr2_sdl3 目标与壳接线（2026-11-20）
+
+`KRKR2_BUILD_SDL3_APP=ON -DKRKR2_BUILD_APP=OFF` 现在生成 `krkr2_sdl3` 可执行目标，
+链接 `krkr2core` 的非 cocos 组合（`core_environ_module` + domain 环 + `core_environ_sdl3`）
+与 SDL3。新源：`environ/sdl3/{SdlEngineRunner.h,.cpp,main.cpp}`；`SdlWindowLayer`/
+`SdlAppDelegate` 接线补齐（`TVPCreateAndAddWindow` 转发、`postVirtualKey` 改走
+`InternalKeyDown`/`OnKeyUp`、UseMouseKey 移植、`cancelInput` 用 `planInputCancellation`、
+IME 三方法镜像 MainScene、DPI provider、`SetImeModeListener` 桥）。模块图改动：
+`core_environ_cocos` 与 `cpp/core` 的 `find_package(cocos2dx)` 改由 `KRKR2_BUILD_APP` 门控，
+`krkr2core` 存档组在非 cocos 配置下把 `core_environ_cocos` 换成 `core_environ_sdl3`。
+
+验证（本机无 vcpkg/SDL3，全部为隔离证据）：
+`g++ -fsyntax-only -std=c++17` 对 sdl3 五个源全部通过（`/tmp/sdl3stub` + `/tmp/fmtstub`）；
+`python scripts/check_core_module_deps.py` 与 `/tmp/check_environ_split.py` 通过；
+用 `/tmp/b22/stubs` 的全套包存根 `cmake -DKRKR2_BUILD_APP=OFF -DKRKR2_BUILD_SDL3_APP=ON
+-DENABLE_TESTS=OFF -DBUILD_TOOLS=OFF` 配置成功，`krkr2_sdl3.dir/link.txt` 链接
+`core_environ_module`+各 domain+`core_environ_sdl3`，无 `core_environ_cocos`；
+默认 full 配置仍只生成 `krkr2`（链 `core_environ_cocos`，无 `core_environ_sdl3`）；
+两标志同时开只单独编译 `core_environ_sdl3` 库，不出可执行（避免 `TVPCreateAndAddWindow`
+双定义）。裸配置失败点在 `find_package(FFMPEG)`（`cpp/external/libbpg`），属依赖缺失而非
+CMake 逻辑错误。
+
+阻断点（链接级，未硬改 B2-0 拆分）：`LocaleConfigManager`/`IndividualConfigManager`/
+`PreferenceDefaults` 的实现源包含在 `core_environ_cocos`（其源码含 `CCFileUtils`、
+`ui/UIText` 等 Cocos 头，符合 B2-0 拆分契约），但 `Application.cpp`、
+`base/{ScriptMgnIntf,SystemIntf}.cpp`、`sysinit/impl/SysInitImpl.cpp` 与 `visual/*` 多处
+在链接时引用 `LocaleConfigManager::GetInstance()`/`IndividualConfigManager`。
+因此 `krkr2_sdl3` 目前配置通过但完整链接会缺这些符号；`TVPYUVSprite`（仅
+`core_movie_module` 的 `KRMoviePlayer` 引用，而 movie 模块成员在非 cocos 图中无引用方）
+不构成阻断。下一步建议：把 ConfigManager 拆成无 Cocos 依赖的核心实现（B2-3），
+或在 `core_environ_sdl3` 内提供等价实现；随后做真实 vcpkg/SDL3 链接与 X11 冒烟。

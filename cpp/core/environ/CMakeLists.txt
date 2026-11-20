@@ -49,7 +49,10 @@ if(NOT (ANDROID OR IOS))
 endif()
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     KRKR2_USE_COCOS_UI=$<BOOL:${KRKR2_USE_COCOS_UI}>
-    KRKR2_ENABLE_CRASH_UPLOAD=$<BOOL:${KRKR2_ENABLE_CRASH_UPLOAD}>)
+    KRKR2_ENABLE_CRASH_UPLOAD=$<BOOL:${KRKR2_ENABLE_CRASH_UPLOAD}>
+    # linux/Platform.cpp wraps its platform glue in #ifdef LINUX; pre-split
+    # this define leaked in from the cocos2dx usage requirements.
+    $<$<BOOL:${LINUX}>:LINUX>)
 target_include_directories(${PROJECT_NAME} PUBLIC ${ENVIRON_HEADERS_DIR})
 
 # 组合根：对外 PUBLIC 链齐运行时栈（foundation + base + domain）
@@ -76,7 +79,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # ---------------------------------------------------------------------------
 # cocos2d 后端源码，独立成库以便后续 SDL3 迁移门控。
 # 所有直接或经头文件传递引用 cocos2dx 的环境层源码都在此目标编译。
+# 配置 KRKR2_BUILD_APP=OFF（krkr2_sdl3 专用配置）时整块跳过：SDL3 壳不能
+# 链接 core_environ_cocos（双方都定义 TVPCreateAndAddWindow 等宿主钩子）。
 # ---------------------------------------------------------------------------
+if(KRKR2_BUILD_APP)
 set(ENVIRON_COCOS_SOURCE_FILES
     ${ENVIRON_PATH}/RenderUtils.cpp
 
@@ -167,19 +173,22 @@ target_link_libraries(core_environ_cocos PRIVATE
 
         minizip
 )
+endif() # KRKR2_BUILD_APP
 
 # ---------------------------------------------------------------------------
-# SDL3 应用壳环境层（骨架，默认不构建；由 KRKR2_BUILD_SDL3_APP 门控）。
-# 源文件由并行代理填充，落盘不完整时跳过本目标而非中断配置。
+# SDL3 应用壳环境层（默认不构建；由 KRKR2_BUILD_SDL3_APP 门控）。
+# 与 core_environ_cocos 互斥：SDL3 壳自带 TVPCreateAndAddWindow 等宿主钩子，
+# 两个后端不能同时进同一个可执行文件。
 # ---------------------------------------------------------------------------
 if(KRKR2_BUILD_SDL3_APP)
     if(EXISTS "${ENVIRON_PATH}/sdl3/SdlAppDelegate.cpp"
+       AND EXISTS "${ENVIRON_PATH}/sdl3/SdlEngineRunner.cpp"
        AND EXISTS "${ENVIRON_PATH}/sdl3/SdlKeyCodeConv.cpp"
        AND EXISTS "${ENVIRON_PATH}/sdl3/SdlWindowLayer.cpp")
         add_subdirectory(sdl3)
     else()
         message(STATUS
-            "core_environ_sdl3: skeleton sources incomplete under ${ENVIRON_PATH}/sdl3, "
+            "core_environ_sdl3: shell sources incomplete under ${ENVIRON_PATH}/sdl3, "
             "skipping the SDL3 environ module")
     endif()
 endif()

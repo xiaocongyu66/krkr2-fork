@@ -434,17 +434,21 @@ namespace krkr::sdl3 {
         tjs_uint32 shift = TVPGetCurrentShiftKeyState();
         if(repeat)
             shift |= TVP_SS_REPEAT;
-        auto *win = currentNativeWindow();
         auto &state = krkr::input::sharedState();
+        // MainScene.cpp:908-915 / 977-982: the current window layer owns the
+        // script-visible key pair. InternalKeyDown additionally hosts the
+        // UseMouseKey emulation (TVPWindow.cpp:779-837), which the direct
+        // input-event posts used to bypass.
+        auto *layer = SdlWindowLayer::GetCurrentWindowLayer();
         if(down) {
             state.press(vk);
-            if(win)
-                TVPPostInputEvent(new tTVPOnKeyDownInputEvent(win, vk, shift));
+            if(layer)
+                layer->InternalKeyDown(vk, shift);
         } else {
             if(!state.release(vk))
                 return; // late/duplicate release (prototype main.cpp:362-365)
-            if(win)
-                TVPPostInputEvent(new tTVPOnKeyUpInputEvent(win, vk, shift));
+            if(layer)
+                layer->OnKeyUp(vk, shift);
         }
     }
 
@@ -463,32 +467,22 @@ namespace krkr::sdl3 {
     }
 
     void SdlAppDelegate::cancelInputOnFocusLoss() {
-        // Hooks the same intent as the InputCancellation plan (the full cocos
-        // path is TVPWindowLayer::CancelInput /
-        // TVPMainScene::CancelPointerInput): release every held key and deliver
-        // matching up events so scripts never see a stuck press. SetUseMouseKey
-        // emulation is not ported yet, so planInputCancellation() has nothing
-        // to dedupe and the direct loop remains exact; swap it in once
-        // mouse-key emulation lands (B2-2).
+        // Full cocos equivalent: TVPMainScene::cancelGameInput ->
+        // TVPWindowLayer::CancelInput, which deduplicates the released keys
+        // through krkr::input::planInputCancellation before posting the
+        // cancellation ups. Without a live layer only the plain key ups keep
+        // script-visible state consistent.
         auto &state = krkr::input::sharedState();
         const std::vector<std::uint32_t> released = state.releaseAll();
-        for(auto key : released) {
-            switch(key) {
-                case krkr::input::key::leftMouse:
-                case krkr::input::key::rightMouse:
-                case krkr::input::key::middleMouse:
-                    if(auto *layer = SdlWindowLayer::GetCurrentWindowLayer())
-                        layer->postSyntheticMouseUp(key);
-                    break;
-                default:
-                    if(auto *win = currentNativeWindow())
-                        TVPPostInputEvent(new tTVPOnKeyUpInputEvent(
-                            win, key, TVPGetCurrentShiftKeyState()));
-                    break;
+        if(auto *layer = SdlWindowLayer::GetCurrentWindowLayer()) {
+            layer->cancelInput(released); // posts pointer/key ups internally
+        } else {
+            for(auto key : released) {
+                if(auto *win = currentNativeWindow())
+                    TVPPostInputEvent(new tTVPOnKeyUpInputEvent(
+                        win, key, TVPGetCurrentShiftKeyState()));
             }
         }
-        if(auto *layer = SdlWindowLayer::GetCurrentWindowLayer())
-            layer->cancelPointerInput(); // drop in-flight touch gestures
     }
 
     void SdlAppDelegate::notifyContextLost() {

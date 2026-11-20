@@ -33,9 +33,11 @@ add_subdirectory(utils)
 # （base 的 ScriptMgnIntf 由更靠后的 core_script 拉出时，utils 已扫过）。
 # RESCAN 链接组等价 --start-group/--end-group，让 ld 重复扫描直到收敛；
 # MSVC 与 Apple 链接器不支持该特性，保持原有顺序路径。
+# KRKR2_BUILD_APP=OFF 且 KRKR2_BUILD_SDL3_APP=ON 时组合根换成 SDL3 壳：
+# core_environ_cocos 与 core_environ_sdl3 都定义 TVPCreateAndAddWindow 等
+# 宿主钩子，不能进同一个链接图。
 set(KRKR2_CORE_ARCHIVE_TARGETS
     core_environ_module
-    core_environ_cocos
     core_base_module
     core_extension_module
     core_plugin_module
@@ -60,6 +62,11 @@ set(KRKR2_CORE_ARCHIVE_TARGETS
     tjs2
     core_log
 )
+set(KRKR2_CORE_ENVIRON_BACKEND core_environ_cocos)
+if(NOT KRKR2_BUILD_APP AND KRKR2_BUILD_SDL3_APP)
+    set(KRKR2_CORE_ENVIRON_BACKEND core_environ_sdl3)
+endif()
+list(APPEND KRKR2_CORE_ARCHIVE_TARGETS ${KRKR2_CORE_ENVIRON_BACKEND})
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_link_libraries(${PROJECT_NAME} INTERFACE
         "$<LINK_GROUP:RESCAN,${KRKR2_CORE_ARCHIVE_TARGETS}>"
@@ -67,7 +74,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 else()
     target_link_libraries(${PROJECT_NAME} INTERFACE
         core_environ_module
-        core_environ_cocos
+        ${KRKR2_CORE_ENVIRON_BACKEND}
         core_extension_module
     )
 endif()
@@ -101,12 +108,15 @@ if(ANDROID)
     )
 endif()
 
-# cocos2dx
-find_package(cocos2dx CONFIG REQUIRED)
+# cocos2dx：仅 cocos 壳配置依赖（KRKR2_BUILD_SDL3_APP 的非 cocos 配置
+# 不链接 core_environ_cocos，也不需要 cocos2dx 安装）。
+if(KRKR2_BUILD_APP)
+    find_package(cocos2dx CONFIG REQUIRED)
 
-## Link libraries
-target_link_libraries(${PROJECT_NAME} INTERFACE
-    # cocos2d
-    cocos2dx::cocos2d
-    $<$<BOOL:${ANDROID}>:$<LINK_LIBRARY:WHOLE_ARCHIVE,cocos2dx::cpp_android_spec>>
-)
+    ## Link libraries
+    target_link_libraries(${PROJECT_NAME} INTERFACE
+        # cocos2d
+        cocos2dx::cocos2d
+        $<$<BOOL:${ANDROID}>:$<LINK_LIBRARY:WHOLE_ARCHIVE,cocos2dx::cpp_android_spec>>
+    )
+endif()
