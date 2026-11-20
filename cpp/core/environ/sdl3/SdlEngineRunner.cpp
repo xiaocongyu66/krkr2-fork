@@ -4,6 +4,7 @@
 
 #include "Application.h" // ::Application (tTVPApplication)
 #include "DialogBackend.h" // TVPInitNativeDialogBackend
+#include "EnvironFileBackendInit.h" // TVPInitEnvironFileBackends
 #include "ConfigManager/LocaleConfigManager.h"
 #include "PostUpdateEvent.h" // TVPInvokePostUpdateEvent
 #include "RenderManager.h" // iTVPTexture2D::RecycleProcess
@@ -15,6 +16,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <filesystem>
 #include <string>
 #include <thread>
 
@@ -60,6 +62,45 @@ namespace TJS {
     }
 } // namespace TJS
 
+// Host hooks the cocoa host supplied via MainScene.cpp:1460-1512 and that
+// non-cocos engine code links against (GlobalConfigManager / Application /
+// SystemIntf). SDL3 equivalents close the krkr2_sdl3 link.
+
+ttstr TVPGetPlatformName() {
+#if defined(_WIN32)
+    return "Win32";
+#elif defined(__ANDROID__)
+    return "Android";
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+    return TARGET_OS_IPHONE ? "iPhone" : "MacOS";
+#elif defined(__linux__)
+    return "Linux";
+#else
+    return "Unknown";
+#endif
+}
+
+ttstr TVPGetOSName() { return TVPGetPlatformName(); }
+
+const std::string &TVPGetInternalPreferencePath() {
+    static const std::string ret = [] {
+        // MainScene.cpp:1460-1471 equivalent: writable base + ".preference".
+        // SDL_GetPrefPath already points at a per-user writable directory and
+        // creates it; keep the extra ".preference" suffix to match the layout
+        // the engine writes under.
+        char *base = SDL_GetPrefPath("krkr2", "krkr2");
+        std::string path = base ? base : ".preference";
+        SDL_free(base);
+        path += ".preference";
+        std::error_code ec;
+        std::filesystem::create_directories(path, ec);
+        path += "/";
+        return path;
+    }();
+    return ret;
+}
+
 namespace krkr::sdl3 {
 
     SdlEngineRunner::SdlEngineRunner() = default;
@@ -70,6 +111,10 @@ namespace krkr::sdl3 {
         // main-thread asserts key off this id and the dialog backend.
         TVPMainThreadID = std::this_thread::get_id();
         TVPInitNativeDialogBackend();
+        // AppDelegate.cpp:48-49 order: the locale/config managers read their
+        // packs through the environ file backend chain, so install it before
+        // any of them initializes.
+        TVPInitEnvironFileBackends();
         G_CoreLog.debug("SDL3 shell finish launching");
 
         if(!app.init())
