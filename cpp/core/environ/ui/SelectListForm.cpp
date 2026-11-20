@@ -6,7 +6,7 @@
 #include "ui/UITextField.h"
 #include "platform/CCDevice.h"
 #include "cocos2d/MainScene.h"
-#include "ConfigManager/LocaleConfigManager.h"
+#include "LocaleTextBinding.h"
 #include "cocos2d/CCKeyCodeConv.h"
 #include "csd/CsdUIFactory.h"
 
@@ -91,7 +91,7 @@ void TVPSelectListForm::initWithInfo(const std::vector<std::string> &info,
 
         cell->setContentSize(size);
         ui::Helper::doLayout(cell);
-        LocaleConfigManager::GetInstance()->initText(text, str);
+        TVPInitLocaleText(text, str);
         // text->addChild(LayerColor::create(cocos2d::Color4B(255,
         // 255, 0, 255), text->getContentSize().width,
         // text->getContentSize().height));

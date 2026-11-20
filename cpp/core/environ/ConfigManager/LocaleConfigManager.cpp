@@ -1,22 +1,34 @@
 #include "LocaleConfigManager.h"
-#include "platform/CCFileUtils.h"
 #include "GlobalConfigManager.h"
+#include "IFileBackend.h"
+#include "tjsString.h"
+#include "UtilStreams.h"
 #include "tinyxml2/tinyxml2.h"
-#include "ui/UIText.h"
-#include "ui/UIButton.h"
+
+namespace {
+    // Bundled-locale lookup order, CWD-relative like the desktop CCFileUtils
+    // resolution before it. The raw package-relative name covers the desktop
+    // data directory and the APK root; "res/" keeps the historic CCFileUtils
+    // search-path entry (AppDelegate.cpp:98) resolvable; "Resources/" matches
+    // the runtime-asset layout both app targets sync to. Every candidate is
+    // optional: a missing pack only leaves the raw tid as the display text.
+    constexpr const char *LocaleCandidates[] = { "", "res/", "Resources/" };
+} // namespace
 
 LocaleConfigManager::LocaleConfigManager() = default;
 
-std::string LocaleConfigManager::GetFilePath() {
-    std::string pathprefix = "locale/"; // constant file in app package
-    std::string fullpath =
-        pathprefix + currentLangCode + ".xml"; // exp. "local/en_us.xml"
-    if(!cocos2d::FileUtils::getInstance()->isFileExist(fullpath)) {
-        currentLangCode =
-            "en_us"; // restore to default language config(must exist)
-        return GetFilePath();
+std::string LocaleConfigManager::GetLocaleResourceName() {
+    for(const char *prefix : LocaleCandidates) {
+        std::string name =
+            std::string(prefix) + "locale/" + currentLangCode + ".xml";
+        if(TVPGetFileBackend()->Exists(ttstr(name)))
+            return name;
     }
-    return cocos2d::FileUtils::getInstance()->fullPathForFilename(fullpath);
+    if(currentLangCode == "en_us")
+        return {}; // restore to default language config(must exist):
+                   // even the default is missing, keep raw tids as text
+    currentLangCode = "en_us";
+    return GetLocaleResourceName();
 }
 
 LocaleConfigManager *LocaleConfigManager::GetInstance() {
@@ -41,8 +53,17 @@ void LocaleConfigManager::Initialize(const std::string &sysLang) {
         currentLangCode = sysLang;
     AllConfig.clear();
     tinyxml2::XMLDocument doc;
-    std::string xmlData =
-        cocos2d::FileUtils::getInstance()->getStringFromFile(GetFilePath());
+    std::string xmlData;
+    if(const std::string name = GetLocaleResourceName(); !name.empty()) {
+        if(auto stream = TVPGetFileBackend()->OpenRead(ttstr(name))) {
+            const tjs_uint64 size = stream->GetSize();
+            if(size > 0) {
+                xmlData.resize(static_cast<size_t>(size));
+                stream->SetPosition(0);
+                stream->Read(xmlData.data(), static_cast<tjs_uint>(size));
+            }
+        }
+    }
     bool _writeBOM = false;
     const char *p = xmlData.c_str();
     p = tinyxml2::XMLUtil::ReadBOM(p, &_writeBOM);
@@ -58,48 +79,4 @@ void LocaleConfigManager::Initialize(const std::string &sysLang) {
             }
         }
     }
-}
-
-bool LocaleConfigManager::initText(cocos2d::ui::Text *ctrl) {
-    if(!ctrl)
-        return false;
-    return initText(ctrl, ctrl->getString());
-}
-
-bool LocaleConfigManager::initText(cocos2d::ui::Button *ctrl) {
-    if(!ctrl)
-        return false;
-    return initText(ctrl, ctrl->getTitleText());
-}
-
-bool LocaleConfigManager::initText(cocos2d::ui::Text *ctrl,
-                                   const std::string &tid) {
-    if(!ctrl)
-        return false;
-
-    std::string txt = GetText(tid);
-    if(txt.empty()) {
-        ctrl->setString(tid);
-        ctrl->setColor(cocos2d::Color3B::RED);
-        return false;
-    }
-
-    ctrl->setString(txt);
-    return true;
-}
-
-bool LocaleConfigManager::initText(cocos2d::ui::Button *ctrl,
-                                   const std::string &tid) {
-    if(!ctrl)
-        return false;
-
-    std::string txt = GetText(tid);
-    if(txt.empty()) {
-        ctrl->setTitleText(tid);
-        ctrl->setTitleColor(cocos2d::Color3B::RED);
-        return false;
-    }
-
-    ctrl->setTitleText(txt);
-    return true;
 }

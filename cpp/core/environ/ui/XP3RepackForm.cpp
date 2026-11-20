@@ -5,6 +5,7 @@
 #include "cocos2d/MainScene.h"
 #include "PreferenceForm.h"
 #include "ConfigManager/LocaleConfigManager.h"
+#include "LocaleTextBinding.h"
 #include "XP3ArchiveRepack.h"
 #include "ui/UIListView.h"
 #include "ui/UILoadingBar.h"
@@ -243,8 +244,8 @@ void TVPXP3RepackFileListForm::bindBodyController(const Node *allNodes) {
     const auto btn = static_cast<Button *>(findNamedNode(root, "btn"));
     constexpr int nButton = 2;
 
-    locmgr->initText(static_cast<Text *>(findNamedNode(root, "title")),
-                     "XP3 Repack");
+    TVPInitLocaleText(static_cast<Text *>(findNamedNode(root, "title")),
+                      "XP3 Repack");
 
     btn->setTitleText(locmgr->GetText("start"));
     btn->addClickEventListener(

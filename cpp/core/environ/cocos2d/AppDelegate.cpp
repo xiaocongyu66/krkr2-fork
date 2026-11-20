@@ -29,6 +29,16 @@ bool TVPCheckStartupArg();
 
 std::string TVPGetCurrentLanguage();
 
+// Host hook for ConfigManager/PreferenceDefaults.cpp (B2-3): preference
+// defaults live in core_environ_module, which must not include GL/cocos
+// headers, so the host supplies the GL renderer string here. Equivalent to
+// the former inline glGetString(GL_RENDERER) in PreferenceDefaults.cpp.
+const char *TVPGetGLRendererString() {
+    const auto *renderer =
+        reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    return renderer ? renderer : "";
+}
+
 void TVPAppDelegate::applicationWillEnterForeground() {
     TVPOnHostForeground();
     cocos2d::Director::getInstance()->startAnimation();

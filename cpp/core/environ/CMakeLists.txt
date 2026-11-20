@@ -27,6 +27,9 @@ set(ENVIRON_SOURCE_FILES
     $<$<BOOL:${LINUX}>:${ENVIRON_PATH}/linux/Platform.cpp>
 
     ${ENVIRON_PATH}/ConfigManager/GlobalConfigManager.cpp
+    ${ENVIRON_PATH}/ConfigManager/IndividualConfigManager.cpp
+    ${ENVIRON_PATH}/ConfigManager/LocaleConfigManager.cpp
+    ${ENVIRON_PATH}/ConfigManager/PreferenceDefaults.cpp
 
     ${ENVIRON_PATH}/impl/SystemControl.cpp
 )
@@ -99,10 +102,7 @@ set(ENVIRON_COCOS_SOURCE_FILES
     ${ENVIRON_PATH}/cocos2d/MainScene.cpp
     ${ENVIRON_PATH}/cocos2d/YUVSprite.cpp
 
-    ${ENVIRON_PATH}/ConfigManager/PreferenceDefaults.cpp
-    ${ENVIRON_PATH}/ConfigManager/IndividualConfigManager.cpp
-    ${ENVIRON_PATH}/ConfigManager/LocaleConfigManager.cpp
-
+    ${ENVIRON_PATH}/ui/LocaleTextBinding.cpp
     ${ENVIRON_PATH}/ui/csd/CsdUIFactory.cpp
     ${ENVIRON_PATH}/ui/csd/CsdUIWidgets.cpp
     ${ENVIRON_PATH}/ui/BaseForm.cpp

@@ -158,3 +158,45 @@ CMake 逻辑错误。
 `core_movie_module` 的 `KRMoviePlayer` 引用，而 movie 模块成员在非 cocos 图中无引用方）
 不构成阻断。下一步建议：把 ConfigManager 拆成无 Cocos 依赖的核心实现（B2-3），
 或在 `core_environ_sdl3` 内提供等价实现；随后做真实 vcpkg/SDL3 链接与 X11 冒烟。
+
+## B2-3：ConfigManager 解耦（2026-11-20）
+
+三个 ConfigManager 源已移入 `core_environ_module` 且不再包含任何 Cocos 头：
+`CCFileUtils::isFileExist`/`fullPathForFilename`/`getStringFromFile` 换成环境层既有的
+`IFileBackend` 链（`TVPGetFileBackend()->Exists/OpenRead`：Android 经 `CocosFileBackend`
+回到 `FileUtils` 读 APK 内打包资源，桌面经 `LocalFileBackend` 走真实文件系统）；
+`LocaleConfigManager` 的候选路径前缀为 `""`、`"res/"`（保留 AppDelegate:98 的历史搜索
+路径）、`"Resources/"`（两套壳的资产同步目录），全部 miss 时回退 `en_us`，连
+`en_us` 也缺时返回空——`GetText` 此时退回把 tid 原样显示，不再像旧代码那样无限递归。
+`ui::Text*`/`ui::Button*` 参数不能留在模块，`initText` 的四个重载整体改由
+`core_environ_cocos` 侧的自由函数 `TVPInitLocaleText(...)`（新文件
+`environ/ui/LocaleTextBinding.{h,cpp}`）承担，行为逐字迁移；调用点仅限
+`environ/ui/` 的 5 个 Form（FileSelector、MainFileSelector、Preference、SelectList、
+XP3Repack）。`PreferenceDefaults.cpp` 的 `#include <cocos2d.h>` 删除，GL 渲染器字符串
+改为宿主钩子 `TVPGetGLRendererString()`，coco 宿主实现仍在 `AppDelegate.cpp`
+（经 `<cocos2d.h>` 拿到 `glGetString`，与旧 TU 相同的编译期保证）。
+`SdlEngineRunner::init()` 在 `TVPInitNativeDialogBackend()` 之后补调
+`TVPInitEnvironFileBackends()`，顺序对齐 AppDelegate:48-49。
+
+验证（本机无 vcpkg/SDL3，全部为隔离证据）：
+`g++ -fsyntax-only` 对三个 ConfigManager cpp 用 module 的 `-I` 集
+（`/tmp/b23-sdl3` 生成的 `core_environ_module` flags.make，外加 `/tmp/b23` 的 tinyxml2
+和 `/tmp/fmtstub` 的 fmt 语法存根）全部通过，即验收标准"不再需要 cocos 头"；
+三个源实际 `-c` 编译出 `.o` 后 `nm` 确认 `LocaleConfigManager::GetInstance/Initialize/
+GetText`、`IndividualConfigManager::*` 与 `TVPInitializeRuntimePreferences` 均定义在
+module 归档成员里，其未定义引用全部落在 module 图内（tjs2、core_io、GlobalConfigManager）
+或仅经 `TVPInitializeRuntimePreferences` 间接触达的宿主钩子；用 `/tmp/b22/stubs` 的
+包存根重新配置 `-DKRKR2_BUILD_APP=OFF -DKRKR2_BUILD_SDL3_APP=ON`，module 目标含 4 个
+ConfigManager 源、无任何 ui/cocos2d 源，`krkr2_sdl3` 链接行不含 `core_environ_cocos`；
+默认 full 配置（同一套存根）下 `core_environ_module` 增加 3 源、`core_environ_cocos`
+减少 3 源并新增 `ui/LocaleTextBinding.cpp`，其余源不变；
+`python scripts/check_core_module_deps.py` 通过；改动 C++ 文件经 clang-format-18
+确认（AppDelegate.cpp 残留的 `#if (CC_TARGET_PLATFORM...)` 续行差异为 18 与 20
+版本差异且原有，未动）。
+
+残留：模块图外仍引用仅存于 `core_environ_cocos` 的宿主钩子
+（`TVPGetInternalPreferencePath`——`GlobalConfigManager::GetFilePath` 依赖，
+`TVPGetPlatformName`——`Application.cpp`/`base/SystemIntf.cpp` 依赖），SDL3 壳尚未
+提供等价实现；`TVPInitializeRuntimePreferences` 在 SDL3 壳尚无调用点（含
+`TVPGetGLRendererString` 的 SDL3 实现）。这些属于 B2-4 宿主钩子批次，
+本次未改。

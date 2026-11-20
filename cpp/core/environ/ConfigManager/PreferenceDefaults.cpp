@@ -1,4 +1,3 @@
-#include <cocos2d.h>
 #include "GlobalConfigManager.h"
 #include "PreferenceDefaults.h"
 
@@ -9,8 +8,7 @@ void TVPInitializeRuntimePreferences() {
     if(initialized)
         return;
     initialized = true;
-    const auto *renderer =
-        reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    const char *renderer = TVPGetGLRendererString();
     TVPApplyRuntimePreferenceDefaults(*GlobalConfigManager::GetInstance(),
                                       renderer &&
                                           std::strstr(renderer, "Adreno"));
