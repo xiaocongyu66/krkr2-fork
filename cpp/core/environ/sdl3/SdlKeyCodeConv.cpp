@@ -32,7 +32,7 @@ namespace {
         table[SDL_SCANCODE_CAPSLOCK] = VK_CAPITAL;
         table[SDL_SCANCODE_PRINTSCREEN] = VK_PRINT; // KEY_PRINT -> VK_PRINT
         table[SDL_SCANCODE_SCROLLLOCK] = VK_SCROLL; // KEY_SCROLL_LOCK
-        table[SDL_SCANCODE_PAUSE] = VK_PAUSE;       // KEY_PAUSE / KEY_BREAK is
+        table[SDL_SCANCODE_PAUSE] = VK_PAUSE; // KEY_PAUSE / KEY_BREAK is
         // VK_CANCEL in CCKeyCodeConv.cpp:86-88; SDL cannot distinguish Break
         // from Pause, keep VK_PAUSE (the common press).
 
@@ -162,7 +162,8 @@ tjs_uint TVPConvertSDLMouseButtonToVKCode(Uint8 button) {
         case SDL_BUTTON_RIGHT:
             return VK_RBUTTON;
         default:
-            return 0; // X1/X2 and beyond: no engine VK (CCKeyCodeConv returns 0)
+            return 0; // X1/X2 and beyond: no engine VK (CCKeyCodeConv returns
+                      // 0)
     }
 }
 
