@@ -12,7 +12,7 @@
 // CMake 注入）。AdapterTexture2D / Director / EventListener /
 // blendResetToCache 等引用限定在相应 #if 段内；纹理/着色器状态调用直接
 // 走宿主加载的 gl* 符号（等价于 cocos2d::GL 无缓存直通）。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
 #include "renderer/CCTexture2D.h"
 #include "renderer/CCGLProgramCache.h"
 #include "renderer/CCGLProgram.h"
@@ -544,7 +544,7 @@ static void _RestoreGLStatues() {
     if(GL_CHECK_unpack_subimage) {
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     }
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     cocos2d::GL::blendResetToCache();
 #else
     // B4 SDL3: 没有 cocos 状态缓存可复位；显式重设为该缓存记录的默认混合
@@ -555,7 +555,7 @@ static void _RestoreGLStatues() {
                         GL_ONE_MINUS_SRC_ALPHA);
 #endif
     TVPSetRenderTarget(0);
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     cocos2d::Director::getInstance()->setViewport();
 #else
     // B4 SDL3: 无 Director；回退逻辑屏幕基准重设视口。TODO B4+：SDL3 壳
@@ -1064,7 +1064,7 @@ protected:
     // B4: AdapterTexture2D —— 仅 cocos 壳编译（给 cocos Sprite 用的纹理
     // 适配半边）。SDL3 路径用 cpp/core/render/KrkrTexture 替代；此处门控后
     // 非 cocos 构建回落到 iTVPTexture2D 的默认 GetAdapterTexture。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     class AdapterTexture2D : public cocos2d::Texture2D {
     public:
         iTVPTexture2D *_owner;
@@ -3015,7 +3015,7 @@ protected:
         // B4: GL 上下文重建（Android surface 丢失等）经 cocos 事件分发器
         // 通知渲染方法重编译；SDL3 壳没有 Director 事件总线，等价的上下文
         // 丢失通知由 SdlAppDelegate::setContextLostCallback 承担（B3+）。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
         cocos2d::EventListenerCustom *listener =
             cocos2d::EventListenerCustom::create(
                 EVENT_RENDERER_RECREATED, [this](cocos2d::EventCustom *) {

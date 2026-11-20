@@ -1,7 +1,7 @@
 // B4: <cocos/base/pvr.h> 提供 PVRTDecompressPVRTC 的声明（实现在 cocos2dx
 // 库内），仅 cocos 壳配置编译；PVRv3Header/PVR3TexturePixelFormat 由
 // 本地 ogl/pvr.h 提供在两个配置下。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
 #include <cocos/base/pvr.h>
 #endif
 #include "tjsCommHead.h"
@@ -240,7 +240,7 @@ void TVPLoadPVRv3(void *formatdata, void *callbackdata,
         case PVR3TexturePixelFormat::PVRTC2BPP_RGBA:
         case PVR3TexturePixelFormat::PVRTC4BPP_RGB:
         case PVR3TexturePixelFormat::PVRTC4BPP_RGBA:
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
             // PVRTC 解码器（PVRTDecompressPVRTC）来自 cocos2dx 库；cocos
             // 配置保持原调用路径。
             PVRTDecompressPVRTC(psrc, pitch / 4, hdr.height, pixel,

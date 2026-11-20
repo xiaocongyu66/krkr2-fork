@@ -10,7 +10,7 @@
 #include "RenderManager.h"
 
 #include "MsgIntf.h"
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
 #include "renderer/CCTexture2D.h"
 typedef cocos2d::Texture2D::PixelFormat CCPixelFormat;
 #endif
@@ -370,7 +370,7 @@ public:
 
     // B4: Texture2D 适配仅在 cocos 壳编译；非 cocos 配置回落到
     // iTVPTexture2D 的默认实现（原样返回 origTex，无 cocos 适配调用方）。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         if(!origTex || origTex->getPixelsWide() != Width ||
@@ -483,7 +483,7 @@ public:
     }
 
     // B4: KRKR2_BUILD_APP 门控，同 tTVPSoftwareTexture2D_static。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         GetPixelData();
@@ -577,7 +577,7 @@ public:
     }
 
     // B4: KRKR2_BUILD_APP 门控，同 tTVPSoftwareTexture2D_static。
-#if defined(KRKR2_BUILD_APP)
+#if KRKR2_BUILD_APP
     cocos2d::Texture2D *
     GetAdapterTexture(cocos2d::Texture2D *origTex) override {
         if(!origTex || origTex->getPixelsWide() != Width ||
