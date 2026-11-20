@@ -82,6 +82,7 @@
           "name": "vcpkg-cmake",
           "host": true
         },
+        "tinyxml2",
         "xxhash",
         "zstd",
         {
