@@ -1,0 +1,17 @@
+MSVC rejects std::views::transform with a pointer to a member operator*
+(error C3889); the other transform call sites use plain data member
+pointers and compile fine. Replace the single PMF usage with a lambda.
+
+--- a/alc/alc.cpp
++++ b/alc/alc.cpp
+@@ -1760,7 +1760,8 @@
+         /* Free all wet buffers. Any in use will be reallocated with an updated
+          * configuration in aluInitEffectPanning.
+          */
+         std::ranges::for_each(context->mEffectSlotClusters
+-            | std::views::transform(&ContextBase::EffectSlotCluster::operator*)
++            | std::views::transform([](ContextBase::EffectSlotCluster &cluster) -> auto&
++            { return *cluster; })
+             | std::views::join, [](EffectSlotBase &slot)
+         {
+             slot.mWetBuffer.clear();

@@ -172,6 +172,52 @@ jobs:
             out/sdl3-prototype/wrong-pointer-run/
             out/sdl3-prototype/os-pointer-run/
             out/sdl3-prototype/os-input-run/
+
+  sdl3-shell:
+    runs-on: ubuntu-24.04
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.act/vcpkg-cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        id: sdl3-shell-cache
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: sdl3-shell-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg*.json', 'vcpkg/**') }}
+          restore-keys: |
+            sdl3-shell-vcpkg-${{ runner.os }}-
+            sdl3-prototype-vcpkg-${{ runner.os }}-
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y perl gcc g++ bison python3 yasm ninja-build \
+            libxft-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev \
+            libxrender-dev libxss-dev libxtst-dev libglu1-mesa-dev libgl2ps-dev \
+            libglew-dev libfontconfig1-dev libsqlite3-dev libgtk-3-dev \
+            autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
+            xvfb xauth \
+            libibus-1.0-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev \
+            wayland-protocols libdecor-0-dev
+      - name: Configure and build the SDL3 application shell
+        shell: bash
+        run: |
+          export VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT"
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          cmake -S . -B out/sdl3-shell/build -G Ninja -DLINUX=ON \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-linux -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DKRKR2_BUILD_APP=OFF -DBUILD_TOOLS=OFF -DENABLE_TESTS=OFF -DKRKR2_BUILD_SDL3_APP=ON
+          cmake --build out/sdl3-shell/build --target krkr2_sdl3 --parallel 4
+      - name: Verify SDL3 shell dependency closure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          status = Path('out/sdl3-shell/build/vcpkg_installed/vcpkg/status').read_text(encoding='utf-8')
+          ports = {line.split(': ', 1)[1] for line in status.splitlines() if line.startswith('Package: ')}
+          assert 'sdl3' in ports, ports
+          assert 'cocos2dx' not in ports, ports
+          print('SDL3 shell closure verified (no cocos2dx):', sorted(ports))
+          PY
             out/sdl3-prototype/build/compile_commands.json
             out/sdl3-prototype/build/vcpkg_installed/vcpkg/status
           if-no-files-found: ignore

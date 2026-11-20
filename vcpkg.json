@@ -25,8 +25,67 @@
       ]
     },
     "sdl3-app": {
-      "description": "SDL3 application shell dependencies",
+      "description": "SDL3 application shell dependencies; mirrors the engine feature minus cocos2dx (vcpkg features cannot reference sibling features, so the list is duplicated -- keep both in sync)",
       "dependencies": [
+        "7zip",
+        {
+          "name": "blend2d",
+          "platform": "!windows"
+        },
+        {
+          "name": "breakpad",
+          "default-features": false,
+          "platform": "android"
+        },
+        "ffmpeg",
+        "glm",
+        "jxrlib",
+        "libarchive",
+        "libxml2",
+        "libjpeg-turbo",
+        {
+          "name": "libogg",
+          "platform": "android"
+        },
+        {
+          "name": "libpng",
+          "platform": "!linux"
+        },
+        "libvorbis",
+        "libwebp",
+        "lz4",
+        {
+          "name": "miniaudio",
+          "platform": "android"
+        },
+        "openal-soft",
+        {
+          "name": "opencv4",
+          "default-features": false,
+          "features": [
+            "openmp"
+          ]
+        },
+        {
+          "name": "opus",
+          "platform": "android"
+        },
+        {
+          "name": "opusfile",
+          "default-features": false
+        },
+        "uchardet",
+        "unrar",
+        {
+          "name": "vcpkg-cmake",
+          "host": true
+        },
+        "zstd",
+        {
+          "name": "dirent",
+          "platform": "windows"
+        },
+        "zlib",
         {
           "name": "sdl3",
           "platform": "!linux"
