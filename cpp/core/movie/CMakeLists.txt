@@ -90,6 +90,14 @@ target_link_libraries(core_movie_cocos PRIVATE core_movie_module core_visual_mod
 # 与 environ cocos2d 目录（CocosWindowAccess/YUVSprite）。
 krkr2_target_include_base_headers(core_movie_cocos)
 krkr2_target_include_environ_headers(core_movie_cocos)
+# Timer.h -> ObjectList.h/TickCount.h live in utils; CocosWindowAccess/
+# YUVSprite live under environ/cocos2d. Direct includes, so the dirs must
+# be on this target's path (PRIVATE deps of core_movie_module do not
+# propagate to it).
+target_include_directories(core_movie_cocos PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../utils
+    ${CMAKE_CURRENT_LIST_DIR}/../environ/cocos2d
+)
 
 find_package(cocos2dx CONFIG REQUIRED)
 target_link_libraries(core_movie_cocos PRIVATE cocos2dx::cocos2d)
