@@ -107,9 +107,14 @@ if(KRKR2_BUILD_APP)
 else()
     # RenderManager.cpp includes xxhash/xxhash.h; the app build gets it via
     # the copy cocos2d-x bundles internally, so the overlay xxhash port
-    # (same include layout) is only needed for host configurations.
-    find_package(xxhash CONFIG REQUIRED)
-    target_link_libraries(${PROJECT_NAME} PRIVATE xxhash::xxhash)
+    # (same include layout) is only needed for host configurations. The
+    # upstream port exports no usable CMake config, so resolve the header
+    # and library the plain way (vcpkg puts them on the default search
+    # path -- same pattern as JXR/LibArchive below).
+    find_path(XXHASH_INCLUDE_DIR NAMES xxhash/xxhash.h)
+    find_library(XXHASH_LIBRARY NAMES xxhash)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${XXHASH_INCLUDE_DIR})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${XXHASH_LIBRARY})
 endif()
 
 find_package(JXR REQUIRED)
