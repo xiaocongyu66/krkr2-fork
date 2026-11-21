@@ -33,7 +33,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3)
 # "RenderManager.h" from visual/.
 target_include_directories(${PROJECT_NAME}
     PUBLIC ${CMAKE_CURRENT_LIST_DIR}
-           ${CMAKE_CURRENT_LIST_DIR}/../../visual
+           ${CMAKE_CURRENT_LIST_DIR}/../visual
 )
 krkr2_target_link_foundation(${PROJECT_NAME} PUBLIC)
 krkr2_target_include_base_headers(${PROJECT_NAME})
