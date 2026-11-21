@@ -144,10 +144,8 @@ tjs_uint TVPConvertScancodeToVKCode(SDL_Scancode scancode) {
     // the engine as VK_A.
     const SDL_Keycode key =
         SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, true);
-    // KMOD_NONE always yields the lowercase base keycode, so normalize to the
-    // uppercase range the engine VK table is keyed by.
-    if(key >= SDLK_a && key <= SDLK_z)
-        return static_cast<tjs_uint>(VK_A + (key - SDLK_a));
+    if(key >= SDLK_A && key <= SDLK_Z)
+        return static_cast<tjs_uint>(VK_A + (key - SDLK_A));
     if(key >= SDLK_0 && key <= SDLK_9)
         return static_cast<tjs_uint>(VK_0 + (key - SDLK_0));
     return 0;
