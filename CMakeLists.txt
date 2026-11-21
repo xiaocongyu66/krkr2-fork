@@ -308,8 +308,8 @@ if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP)
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/sync_runtime_assets.py"
                 --source "${GAME_RES_FOLDER}"
                 --destination "$<TARGET_PROPERTY:${KRKR2_SDL3_TARGET},RUNTIME_OUTPUT_DIRECTORY>/${CMAKE_CFG_INTDIR}/Resources"
-                --all "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-sdl3-all.txt"
-                --selected "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-sdl3-selected.txt"
+                --all "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-all.txt"
+                --selected "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-selected.txt"
             VERBATIM)
         target_sources(${KRKR2_SDL3_TARGET} PRIVATE ${common_res_files})
     endif()
