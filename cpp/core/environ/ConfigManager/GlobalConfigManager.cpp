@@ -3,6 +3,7 @@
 #include "Platform.h"
 #include "UtilStreams.h"
 #include "LocaleConfigManager.h"
+#include <cstdarg>
 
 bool TVPWriteDataToFile(const ttstr &filepath, const void *data,
                         unsigned int len);
