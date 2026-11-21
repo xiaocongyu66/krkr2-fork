@@ -104,6 +104,12 @@ if(KRKR2_BUILD_APP)
     target_link_libraries(${PROJECT_NAME} PRIVATE
             cocos2dx::cocos2d
     )
+else()
+    # RenderManager.cpp includes xxhash/xxhash.h; the app build gets it via
+    # the copy cocos2d-x bundles internally, so the overlay xxhash port
+    # (same include layout) is only needed for host configurations.
+    find_package(xxhash CONFIG REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE xxhash::xxhash)
 endif()
 
 find_package(JXR REQUIRED)
