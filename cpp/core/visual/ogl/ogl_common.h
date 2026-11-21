@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(_WIN32) || defined(LINUX)
+#if defined(_WIN32) || defined(__linux__)
 #if defined(_M_X64)
 #define GLEW_STATIC
 #endif
