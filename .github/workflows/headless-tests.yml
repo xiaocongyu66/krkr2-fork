@@ -199,6 +199,7 @@ jobs:
             libibus-1.0-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev \
             wayland-protocols libdecor-0-dev
       - name: Configure and build the SDL3 application shell
+        id: build-sdl3
         shell: bash
         run: |
           export VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT"
@@ -218,14 +219,19 @@ jobs:
           assert 'cocos2dx' not in ports, ports
           print('SDL3 shell closure verified (no cocos2dx):', sorted(ports))
           PY
-            out/sdl3-prototype/build/compile_commands.json
-            out/sdl3-prototype/build/vcpkg_installed/vcpkg/status
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdl3-shell-LINUX
+          path: |
+            out/sdl3-shell/build/compile_commands.json
+            out/sdl3-shell/build/vcpkg_installed/vcpkg/status
           if-no-files-found: ignore
       - uses: actions/cache/save@v4
-        if: always() && steps.build-sdl3.outcome == 'success' && steps.sdl3-cache.outputs.cache-hit != 'true'
+        if: always() && steps.build-sdl3.outcome == 'success' && steps.sdl3-shell-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: ${{ steps.sdl3-cache.outputs.cache-primary-key }}
+          key: ${{ steps.sdl3-shell-cache.outputs.cache-primary-key }}
 
   archives:
     env:
