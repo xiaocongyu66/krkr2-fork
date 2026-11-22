@@ -92,6 +92,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE libbpg)
 
+find_package(Freetype REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Freetype::Freetype)
+
 find_package(WebP CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} INTERFACE WebP::webp WebP::webpdecoder WebP::webpdemux)
 
