@@ -52,7 +52,11 @@ set(KRKR2_CORE_ARCHIVE_TARGETS
     core_event
     core_script
     core_sysinit
-    core_storage
+)
+if(TARGET core_storage)
+    list(APPEND KRKR2_CORE_ARCHIVE_TARGETS core_storage)
+endif()
+list(APPEND KRKR2_CORE_ARCHIVE_TARGETS
     core_storage_archive
     archive_xp3
     archive_zip
