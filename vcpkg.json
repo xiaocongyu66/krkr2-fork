@@ -96,7 +96,8 @@
         },
         {
           "name": "sdl3",
-          "platform": "linux"
+          "platform": "linux",
+          "features": ["dbus"]
         }
       ]
     },

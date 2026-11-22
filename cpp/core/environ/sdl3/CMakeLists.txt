@@ -9,6 +9,7 @@ add_library(${PROJECT_NAME} STATIC
     SdlKeyCodeConv.cpp
     SdlWindowLayer.cpp
     SdlFileSelector.cpp
+    SdlMenu.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
