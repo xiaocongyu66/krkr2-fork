@@ -8,6 +8,7 @@ add_library(${PROJECT_NAME} STATIC
     SdlEngineRunner.cpp
     SdlKeyCodeConv.cpp
     SdlWindowLayer.cpp
+    SdlFileSelector.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)

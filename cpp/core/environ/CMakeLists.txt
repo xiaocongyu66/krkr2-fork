@@ -82,9 +82,11 @@ endif()
 
 find_package(7zip CONFIG REQUIRED)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-        7zip::7zip
-)
+target_link_libraries(${PROJECT_NAME} PRIVATE 7zip::7zip)
+if(KRKR2_BUILD_SDL3_APP)
+    find_package(tinyxml2 CONFIG REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE tinyxml2::tinyxml2)
+endif()
 
 # ---------------------------------------------------------------------------
 # cocos2d 后端源码，独立成库以便后续 SDL3 迁移门控。
