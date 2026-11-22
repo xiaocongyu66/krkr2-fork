@@ -27,7 +27,7 @@ target_include_directories(core_storage_archive PUBLIC ${STORAGE_PUBLIC_INCLUDES
 target_link_libraries(core_storage_archive PUBLIC tjs2 core_io core_msg)
 
 # 工具和归档测试只需要共享归档基础层，不配置完整存储介质。
-if(NOT KRKR2_BUILD_APP AND (NOT ENABLE_TESTS OR NOT KRKR2_TEST_SCOPE STREQUAL "full"))
+if(NOT KRKR2_BUILD_APP AND NOT KRKR2_BUILD_SDL3_APP AND (NOT ENABLE_TESTS OR NOT KRKR2_TEST_SCOPE STREQUAL "full"))
     return()
 endif()
 
