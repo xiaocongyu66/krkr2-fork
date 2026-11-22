@@ -30,5 +30,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     tjs2
     core_msg
     core_sysinit
-    core_storage
 )
+if(TARGET core_storage)
+    target_link_libraries(${PROJECT_NAME} PUBLIC core_storage)
+endif()

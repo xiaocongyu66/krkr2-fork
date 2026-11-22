@@ -53,8 +53,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     archive_7z
     archive_tar
     core_io
-    core_storage_engine
 )
+if(TARGET core_storage_engine)
+    target_link_libraries(${PROJECT_NAME} PUBLIC core_storage_engine)
+endif()
 
 find_package(uchardet CONFIG REQUIRED)
 find_package(unrar CONFIG REQUIRED)
