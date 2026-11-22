@@ -9,7 +9,6 @@ set(KRKR2_FOUNDATION_LIBS
     core_sysinit
     core_script
     core_event
-    core_storage_engine
     archive_xp3
     archive_zip
     archive_7z
@@ -18,6 +17,9 @@ set(KRKR2_FOUNDATION_LIBS
 
 function(krkr2_target_link_foundation target visibility)
     target_link_libraries(${target} ${visibility} ${KRKR2_FOUNDATION_LIBS})
+    if(TARGET core_storage_engine)
+        target_link_libraries(${target} ${visibility} core_storage_engine)
+    endif()
 endfunction()
 
 # base + 已迁出模块头文件路径（替代 base/ 下的兼容转发头）
