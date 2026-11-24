@@ -75,6 +75,16 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+XErrorHandlerFunc = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p,
+                                    ctypes.c_void_p)
+
+
+def _swallow_x11_error(display, event):
+    # Window enumeration races: a window can vanish between XQueryTree and
+    # XGetWindowProperty. Without a handler, Xlib aborts the harness.
+    return 0
+
+
 class X11:
     def __init__(self):
         name = ctypes.util.find_library("X11")
@@ -125,6 +135,10 @@ class X11:
         self.lib.XDestroyImage.argtypes = [ctypes.POINTER(XImage)]
         self.lib.XFree.argtypes = [ctypes.c_void_p]
         self.lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self._error_handler = XErrorHandlerFunc(_swallow_x11_error)
+        self.lib.XSetErrorHandler.argtypes = [XErrorHandlerFunc]
+        self.lib.XSetErrorHandler.restype = [XErrorHandlerFunc]
+        self.lib.XSetErrorHandler(self._error_handler)
         self.root = self.lib.XDefaultRootWindow(self.display)
         self.pid_atom = self.lib.XInternAtom(self.display, b"_NET_WM_PID", 0)
         self.atom_cardinal = self.lib.XInternAtom(self.display, b"CARDINAL", 0)
