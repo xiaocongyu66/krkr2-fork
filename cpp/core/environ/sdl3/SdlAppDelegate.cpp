@@ -1,5 +1,12 @@
 #include "SdlAppDelegate.h"
 
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+// Same GLEW_STATIC posture as visual/ogl/ogl_common.h so the __glew*
+// pointers we initialize here are the same ones the engine renderer calls.
+#define GLEW_STATIC
+#include <GL/glew.h>
+#endif
+
 #include "SdlKeyCodeConv.h"
 #include "SdlWindowLayer.h"
 #include "KrkrRenderContext.h"
@@ -79,6 +86,13 @@ namespace krkr::sdl3 {
             return false;
         }
         if(!SDL_GL_MakeCurrent(window, glContext)) {
+            releaseWindow();
+            return false;
+        }
+        // The engine ogl renderer calls GLEW function pointers (__glew*);
+        // the cocos host has cocos2d-x's GLView populate them, the SDL3
+        // host must initialize GLEW itself on the same thread.
+        if(glewInit() != GLEW_OK) {
             releaseWindow();
             return false;
         }

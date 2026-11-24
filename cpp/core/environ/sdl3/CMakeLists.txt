@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 project(core_environ_sdl3 LANGUAGES CXX)
 
 find_package(SDL3 3.4 CONFIG REQUIRED)
+find_package(GLEW CONFIG REQUIRED)
 
 add_library(${PROJECT_NAME} STATIC
     SdlAppDelegate.cpp
@@ -25,5 +26,5 @@ target_include_directories(${PROJECT_NAME}
 # it is built standalone under a cocos KRKR2_BUILD_APP=ON configuration.
 target_link_libraries(${PROJECT_NAME}
     PUBLIC core_environ_module SDL3::SDL3
-    PRIVATE core_input
+    PRIVATE core_input GLEW::GLEW
 )
