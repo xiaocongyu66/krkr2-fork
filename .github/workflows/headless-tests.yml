@@ -219,6 +219,23 @@ jobs:
           assert 'cocos2dx' not in ports, ports
           print('SDL3 shell closure verified (no cocos2dx):', sorted(ports))
           PY
+      - name: Run SDL3 X11 pixel smoke
+        run: xvfb-run -a python3 tools/game-smoke/sdl3_pixel_smoke.py out/sdl3-shell/build/bin/krkr2_sdl3/krkr2_sdl3 out/sdl3-shell/pixel-smoke
+      - name: Run SDL3 pixel smoke negative control (must fail)
+        shell: bash
+        run: |
+          if xvfb-run -a python3 tools/game-smoke/sdl3_pixel_smoke.py out/sdl3-shell/build/bin/krkr2_sdl3/krkr2_sdl3 out/sdl3-shell/pixel-smoke-wrong --wrong-marker; then
+            echo "Negative control unexpectedly passed"
+            exit 1
+          else
+            echo "Negative control failed as expected"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdl3-pixel-smoke
+          path: out/sdl3-shell/pixel-smoke*/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
