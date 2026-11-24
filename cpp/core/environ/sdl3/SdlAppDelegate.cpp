@@ -9,6 +9,7 @@
 #include "WindowImpl.h" // tTJSNI_BaseWindow, TVPGetCurrentShiftKeyState
 #include "EventIntf.h" // TVPPostInputEvent
 #include "tvpinputdefs.h" // TVP_SS_REPEAT, VK_PAD range
+#include "vkdefine.h" // VK_BACK
 #include "InputState.h" // krkr::input::sharedState()
 #include "InputModifiers.h" // krkr::input::key::*
 

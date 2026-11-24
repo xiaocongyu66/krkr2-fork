@@ -621,7 +621,7 @@ namespace krkr::sdl3 {
 
     bool SdlWindowLayer::GetFormEnabled() { return Visible; }
 
-    void SdlWindowLayer::SetDefaultMouseCursor() { SDL_ShowCursor(true); }
+    void SdlWindowLayer::SetDefaultMouseCursor() { SDL_ShowCursor(); }
 
     void SdlWindowLayer::GetCursorPos(tjs_int &x, tjs_int &y) {
         x = LastMouseX;
