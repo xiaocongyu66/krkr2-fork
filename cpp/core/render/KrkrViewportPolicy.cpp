@@ -83,11 +83,14 @@ namespace krkr::render {
             baseOffsetY = 0.f;
         }
 
-        // RecalcPaintBox's scale triple (TVPWindow.cpp:581-583):
-        // setMinScale(scale); setMaxScale(scale * 2); setZoomScale(scale).
+        // Recompute the base scale range without discarding a user zoom.
+        // Initialize zoom from the new fit scale on first layout; thereafter
+        // clamp the existing zoom to the current window's valid range.
+        bool firstLayout = minScale_ <= 0.f;
         minScale_ = baseScale;
         maxScale_ = baseScale * 2.f;
-        zoomScale_ = baseScale;
+        if(firstLayout)
+            zoomScale_ = baseScale;
 
         // Clamp/zoom role (setMinScale/setMaxScale/setZoomScale, :581-584):
         // zoom applied afterwards grows the base rect from its center.

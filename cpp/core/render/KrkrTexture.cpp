@@ -22,8 +22,6 @@ namespace krkr::render {
             engineTex_->Release();
             engineTex_ = nullptr;
         }
-        resolveDirty_ = true;
-        resolvedName_ = 0;
     }
 
     void KrkrTexture::releaseOwned() {
@@ -72,8 +70,6 @@ namespace krkr::render {
         // Drop managed content, if any: the engine texture owns the GL object
         // now.
         releaseOwned();
-        resolveDirty_ = true;
-        resolvedName_ = 0;
     }
 
     bool KrkrTexture::mapFormat(TVPTextureFormat::e format, GLFormat &out) {
@@ -198,13 +194,8 @@ namespace krkr::render {
     }
 
     GLuint KrkrTexture::glName() const {
-        if(engineTex_) {
-            if(resolveDirty_) {
-                resolvedName_ = resolver_ ? resolver_->resolve(engineTex_) : 0;
-                resolveDirty_ = false;
-            }
-            return resolvedName_;
-        }
+        if(engineTex_)
+            return resolver_ ? resolver_->resolve(engineTex_) : 0;
         if(!ownedName_ || ownedStale_)
             ensureOwnedName();
         return ownedName_;
@@ -222,8 +213,6 @@ namespace krkr::render {
         // No GL calls here: after context loss the old names belong to a dead
         // context.ogl:2968-2980 shows the engine only rebuilds *shaders* on
         // EVENT_RENDERER_RECREATED -- texture content is restored by redrawing.
-        resolveDirty_ = true;
-        resolvedName_ = 0;
         ownedStale_ = true; // forget; next upload/glName re-creates
     }
 

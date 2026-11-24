@@ -47,6 +47,11 @@ namespace krkr::render {
         gl.glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBufferBinding_);
         gl.glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebufferBinding_);
         gl.glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment_);
+        gl.glGetVertexAttribiv(0, GL_VERTEX_ATTRIB_ARRAY_ENABLED,
+                               &vertexAttrib0Enabled_);
+        gl.glGetVertexAttribiv(1, GL_VERTEX_ATTRIB_ARRAY_ENABLED,
+                               &vertexAttrib1Enabled_);
+        gl.glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor_);
     }
 
     KrkrGLState::~KrkrGLState() {
@@ -62,6 +67,16 @@ namespace krkr::render {
         gl.glActiveTexture((GLenum)activeTexture_);
         gl.glBindTexture(GL_TEXTURE_2D, (GLuint)textureBinding2D_);
         gl.glViewport(viewport_[0], viewport_[1], viewport_[2], viewport_[3]);
+        gl.glClearColor(clearColor_[0], clearColor_[1], clearColor_[2],
+                        clearColor_[3]);
+        if(vertexAttrib0Enabled_ == GL_TRUE)
+            gl.glEnableVertexAttribArray(0);
+        else
+            gl.glDisableVertexAttribArray(0);
+        if(vertexAttrib1Enabled_ == GL_TRUE)
+            gl.glEnableVertexAttribArray(1);
+        else
+            gl.glDisableVertexAttribArray(1);
         if(blendEnabled_ == GL_TRUE)
             gl.glEnable(GL_BLEND);
         else
@@ -203,6 +218,7 @@ namespace krkr::render {
         gl.glBindTexture(GL_TEXTURE_2D, name);
         gl.glUseProgram(program_);
         gl.glUniform1i(uniformTexture_, 0);
+        gl.glBindBuffer(GL_ARRAY_BUFFER, 0);
         gl.glEnableVertexAttribArray(0);
         gl.glEnableVertexAttribArray(1);
         gl.glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, positions);

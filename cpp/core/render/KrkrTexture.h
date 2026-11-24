@@ -65,7 +65,8 @@ namespace krkr::render {
         KrkrTexture(const KrkrTexture &) = delete;
         KrkrTexture &operator=(const KrkrTexture &) = delete;
 
-        // Install the engine-side name resolver once at B3 init.
+        // Installed once at B3 init and immutable afterward; glName() is
+        // called only on the GL thread.
         static void setNameResolver(KrkrTextureNameResolver *resolver);
 
         // Adopt an engine texture: AddRef (releasing any previously adopted
@@ -115,13 +116,9 @@ namespace krkr::render {
         // (GL-thread only when it deletes GL objects). Invalidates all metrics.
         void release();
 
-        // Context loss: mark every GL name stale *without* calling GL (the
-        // context may already be gone). The engine redraws content after
-        // EVENT_RENDERER_RECREATED; glName() then re-resolves (adopted) and the
-        // next upload() recreates the owned name. Note: the engine's own
-        // texture GL names are invalidated engine-side (ogl does not rebuild
-        // them on EVENT_RENDERER_RECREATED, ogl:2968-2980 -- engine redraw
-        // restores content).
+        // Mark the owned GL name stale without calling GL. Adopted texture GL
+        // names are engine-managed; glName() resolves the current name each
+        // call. After context loss, the engine redraws to restore content.
         void invalidate();
 
         // Uncompressed format mapping (ogl:928-945).
@@ -142,9 +139,6 @@ namespace krkr::render {
         mutable GLuint ownedName_ = 0; // GL name we created (managed uploads)
         mutable bool ownedStale_ =
             false; // owned name marked stale by invalidate()
-        mutable GLuint resolvedName_ = 0; // cached engine name
-        mutable bool resolveDirty_ = true;
-
         int width_ = 0, height_ = 0;
         int internalW_ = 0, internalH_ = 0;
         float scaleX_ = 1.f, scaleY_ = 1.f;

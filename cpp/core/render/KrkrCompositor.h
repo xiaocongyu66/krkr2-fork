@@ -58,6 +58,9 @@ namespace krkr::render {
         GLint arrayBufferBinding_ = 0;
         GLint framebufferBinding_ = 0;
         GLint unpackAlignment_ = 4;
+        GLint vertexAttrib0Enabled_ = GL_FALSE;
+        GLint vertexAttrib1Enabled_ = GL_FALSE;
+        GLfloat clearColor_[4] = { 0.f, 0.f, 0.f, 0.f };
     };
 
     class KrkrCompositor {

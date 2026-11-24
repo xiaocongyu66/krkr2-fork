@@ -62,10 +62,9 @@ namespace krkr::render {
         // Fit/Fill toggle with the toggleFillScale early-out (:637-641).
         Mode toggleMode(int winW, int winH);
 
-        // RecalcPaintBox (:562-586) for the given window size. As
-        // RecalcPaintBox does via setMinScale/setMaxScale/setZoomScale
-        // (:581-583), this resets zoomScale to the fresh fit scale and min/max
-        // scale to [scale, scale * 2] as a side effect.
+        // RecalcPaintBox (:562-586) for the given window size. Recomputes
+        // the base fit scale and min/max range while preserving the current
+        // zoom scale across frames.
         Viewport fit(int winW, int winH);
 
     private:
