@@ -150,6 +150,7 @@ public:
         y = 1.f;
         return true;
     }
+    virtual unsigned int GetOGLTextureName() const { return 0; }
 
     static void RecycleProcess();
 };

@@ -52,15 +52,13 @@ namespace krkr::sdl3 {
 
         // GL context attributes, aligned with AppDelegate.cpp:146-148
         // (RGBA8 + depth24 + stencil8).
-        SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        if(!render::KrkrRenderContext::applyGLAttributes()) {
+            SDL_Quit();
+            ownsSDL = false;
+            return false;
+        }
 
-        const SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE |
+        const SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
             SDL_WINDOW_HIGH_PIXEL_DENSITY |
             (config.fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
         window = SDL_CreateWindow(config.title.c_str(), config.width,
@@ -78,8 +76,8 @@ namespace krkr::sdl3 {
             return false;
         }
         if(!SDL_GL_MakeCurrent(window, glContext)) {
-            // Renderer-less host: MakeCurrent is only fatal if it errors; keep
-            // running with unset context, later swap will report failure.
+            releaseWindow();
+            return false;
         }
         vsync = SDL_GL_SetSwapInterval(1); // match the 60fps Director pacing
 
@@ -150,6 +148,11 @@ namespace krkr::sdl3 {
 
     void SdlAppDelegate::setCloseQueryCallback(CloseQueryCallback callback) {
         closeQueryCallback = std::move(callback);
+    }
+
+    void
+    SdlAppDelegate::setDrawableSizeCallback(DrawableSizeCallback callback) {
+        drawableSizeCallback = std::move(callback);
     }
 
     void SdlAppDelegate::setContextLostCallback(ContextLostCallback callback) {
@@ -310,6 +313,7 @@ namespace krkr::sdl3 {
                 case SDL_EVENT_WINDOW_RESTORED:
                 case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
                 case SDL_EVENT_WINDOW_RESIZED:
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                     handleWindowEvent(event.window);
                     break;
 
@@ -404,13 +408,18 @@ namespace krkr::sdl3 {
                     running = false;
                 break;
 
-            case SDL_EVENT_WINDOW_RESIZED:
+            case SDL_EVENT_WINDOW_RESIZED: {
                 // Window units (not pixels) match the SDL mouse coordinate
                 // space.
                 SdlWindowLayer::SetSharedViewSize(event.data1, event.data2);
-                // Surface/viewport recreation -> the engine's GL caches are
-                // stale.
-                notifyContextLost();
+                break;
+            }
+
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                // Drawable pixels drive glViewport; a resize does not recreate
+                // SDL's GL context.
+                if(drawableSizeCallback)
+                    drawableSizeCallback();
                 break;
 
             default:

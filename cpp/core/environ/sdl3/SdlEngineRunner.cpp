@@ -7,7 +7,7 @@
 #include "EnvironFileBackendInit.h" // TVPInitEnvironFileBackends
 #include "ConfigManager/LocaleConfigManager.h"
 #include "PostUpdateEvent.h" // TVPInvokePostUpdateEvent
-#include "RenderManager.h" // iTVPTexture2D::RecycleProcess
+#include "RenderManager.h" // iTVPTexture2D::RecycleProcess, OGL texture resolver
 #include "SysInitIntf.h" // TVPGetDefaultRendererName host hook
 #include "TextInput.h" // krkr::input::decodeTextInput
 #include "TVPError.h" // TVPThrowExceptionMessage
@@ -168,7 +168,84 @@ const std::string &TVPGetInternalPreferencePath() {
 namespace krkr::sdl3 {
 
     SdlEngineRunner::SdlEngineRunner() = default;
-    SdlEngineRunner::~SdlEngineRunner() = default;
+
+    SdlEngineRunner::~SdlEngineRunner() {
+        SdlWindowLayer::SetDrawBufferCallback({});
+        SdlWindowLayer::SetCurrentWindowCallback({});
+        if(renderContext.window() && renderContext.context())
+            renderContext.makeCurrent();
+        if(pendingTexture)
+            pendingTexture->Release();
+        surfaceTexture.release();
+        compositor.invalidate();
+        render::KrkrTexture::setNameResolver(nullptr);
+        renderContext.detach();
+    }
+
+    unsigned int SdlEngineRunner::resolve(const iTVPTexture2D *tex) {
+        return tex ? tex->GetOGLTextureName() : 0;
+    }
+
+    void SdlEngineRunner::acceptDrawBuffer(iTVPTexture2D *tex) {
+        if(pendingTexture == tex && (tex || pendingTextureChanged))
+            return;
+        if(tex)
+            tex->AddRef();
+        if(pendingTexture)
+            pendingTexture->Release();
+        pendingTexture = tex;
+        pendingTextureChanged = true;
+    }
+
+    void SdlEngineRunner::updateViewportFromCurrentLayer() {
+        auto *layer = SdlWindowLayer::GetCurrentWindowLayer();
+        if(!layer)
+            return;
+
+        const int designW = layer->GetLayerWidth();
+        const int designH = layer->GetLayerHeight();
+        if(designW <= 0 || designH <= 0)
+            return;
+
+        float fillX = 1.f, fillY = 1.f;
+        layer->getPaintBox(fillX, fillY);
+        viewportPolicy.setDesignSize(designW, designH);
+        viewportPolicy.setMode(fillX != 1.f || fillY != 1.f
+                                   ? render::KrkrViewportPolicy::Mode::Fill
+                                   : render::KrkrViewportPolicy::Mode::Fit);
+    }
+
+    void SdlEngineRunner::presentFrame() {
+        if(!renderContext.isCurrent())
+            return;
+
+        if(pendingTextureChanged) {
+            surfaceTexture.update(pendingTexture);
+            if(pendingTexture)
+                pendingTexture->Release();
+            pendingTexture = nullptr;
+            pendingTextureChanged = false;
+        }
+
+        int width = 0, height = 0;
+        app.getWindowSizeInPixels(width, height);
+        compositor.resize(width, height);
+        updateViewportFromCurrentLayer();
+        compositor.setViewportPolicy(&viewportPolicy);
+        float scaleX = 1.f, scaleY = 1.f;
+        surfaceTexture.getScale(scaleX, scaleY);
+        compositor.setSurfaceTexture(
+            &surfaceTexture,
+            SdlWindowLayer::GetCurrentWindowLayer()
+                ? SdlWindowLayer::GetCurrentWindowLayer()->GetLayerWidth()
+                : surfaceTexture.width(),
+            SdlWindowLayer::GetCurrentWindowLayer()
+                ? SdlWindowLayer::GetCurrentWindowLayer()->GetLayerHeight()
+                : surfaceTexture.height(),
+            scaleX, scaleY);
+        compositor.draw();
+        compositor.flush();
+    }
 
     bool SdlEngineRunner::init() {
         // AppDelegate.cpp:43-44: the engine's out-of-memory callback and the
@@ -189,6 +266,32 @@ namespace krkr::sdl3 {
         SdlWindowLayer::SetImeModeListener(
             [this](bool enabled) { app.setTextInputEnabled(enabled); });
         app.setIMEDelegate(&imeAdapter);
+        renderContext.attach(app.getWindow(), app.getGLContext());
+        if(!renderContext.makeCurrent() ||
+           !render::bindGL(SDL_GL_GetProcAddress)) {
+            renderContext.detach();
+            app.setIMEDelegate(nullptr);
+            SdlWindowLayer::SetDpiProvider({});
+            SdlWindowLayer::SetImeModeListener({});
+            return false;
+        }
+        render::KrkrTexture::setNameResolver(this);
+        compositor.setViewportPolicy(&viewportPolicy);
+        SdlWindowLayer::SetDrawBufferCallback(
+            [this](iTVPTexture2D *tex) { acceptDrawBuffer(tex); });
+        SdlWindowLayer::SetCurrentWindowCallback(
+            [this](SdlWindowLayer *) { acceptDrawBuffer(nullptr); });
+        app.setDrawableSizeCallback([this] {
+            int width = 0, height = 0;
+            app.getWindowSizeInPixels(width, height);
+            compositor.resize(width, height);
+        });
+        app.setContextLostCallback([this] {
+            compositor.invalidate();
+            surfaceTexture.invalidate();
+            render::bindGL(SDL_GL_GetProcAddress);
+            renderContext.makeCurrent();
+        });
         app.setCloseQueryCallback([] {
             // The window's close button takes the layer's close-query flow:
             // a script veto (Window.onCloseQuery) keeps the window open,
@@ -204,10 +307,11 @@ namespace krkr::sdl3 {
         // frame. ProcessMessages + SystemWatchTimerTimer inside Run() deliver
         // TVPDeliverAllEvents (SystemControl.cpp:112-119) and every window's
         // TickBeat, which drives the UseMouseKey cursor motor.
-        app.setFrameCallback([] {
+        app.setFrameCallback([this] {
             ::Application->Run();
             iTVPTexture2D::RecycleProcess();
             TVPInvokePostUpdateEvent();
+            presentFrame();
         });
         return true;
     }

@@ -99,6 +99,8 @@ namespace krkr::sdl3 {
         // reset TVPGLExtensionInfoInited (ogl:122). Both actions have stub
         // bodies here pending the B3 engine-side adapter; this callback is the
         // wire point.
+        using DrawableSizeCallback = std::function<void()>;
+        void setDrawableSizeCallback(DrawableSizeCallback callback);
         using ContextLostCallback = std::function<void()>;
         void setContextLostCallback(ContextLostCallback callback);
         [[nodiscard]] ContextLostCallback getContextLostCallback() const;
@@ -125,6 +127,8 @@ namespace krkr::sdl3 {
         void getWindowSize(int &width, int &height) const;
         void getWindowSizeInPixels(int &width, int &height) const;
         [[nodiscard]] SDL_WindowID getWindowID() const { return windowID; }
+        [[nodiscard]] SDL_Window *getWindow() const { return window; }
+        [[nodiscard]] SDL_GLContext getGLContext() const { return glContext; }
 
     private:
         void pollEvents();
@@ -169,6 +173,7 @@ namespace krkr::sdl3 {
 
         FrameCallback frameCallback;
         CloseQueryCallback closeQueryCallback;
+        DrawableSizeCallback drawableSizeCallback;
         ContextLostCallback contextLostCallback;
         SdlIMEDelegate *imeDelegate = nullptr;
 

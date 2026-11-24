@@ -26,6 +26,8 @@ namespace krkr::sdl3 {
     tjs_int SdlWindowLayer::sharedViewHeight = 0;
     SdlWindowLayer::ImeModeListener SdlWindowLayer::imeModeListener;
     std::function<float()> SdlWindowLayer::DpiProvider;
+    std::function<void(iTVPTexture2D *)> SdlWindowLayer::DrawBufferCallback;
+    std::function<void(SdlWindowLayer *)> SdlWindowLayer::CurrentWindowCallback;
 
     SdlWindowLayer::SdlWindowLayer(tTJSNI_Window *window) :
         nativeWindow(window) {
@@ -64,6 +66,8 @@ namespace krkr::sdl3 {
            currentWindowLayer->nativeWindow)
             currentWindowLayer->nativeWindow->OnReleaseCapture();
         currentWindowLayer = window;
+        if(CurrentWindowCallback)
+            CurrentWindowCallback(window);
         // TVPWindow.cpp:482: the current window owns the shared IME state.
         notifyImeMode();
     }
@@ -74,6 +78,16 @@ namespace krkr::sdl3 {
 
     void SdlWindowLayer::SetDpiProvider(std::function<float()> provider) {
         DpiProvider = std::move(provider);
+    }
+
+    void SdlWindowLayer::SetDrawBufferCallback(
+        std::function<void(iTVPTexture2D *)> callback) {
+        DrawBufferCallback = std::move(callback);
+    }
+
+    void SdlWindowLayer::SetCurrentWindowCallback(
+        std::function<void(SdlWindowLayer *)> callback) {
+        CurrentWindowCallback = std::move(callback);
     }
 
     void SdlWindowLayer::notifyImeMode() {
@@ -103,6 +117,11 @@ namespace krkr::sdl3 {
     // the content aspect (R) and fit with centered letterbox offsets; min scale
     // is the fit scale and max scale is twice it; zoom scale starts at the fit.
     //---------------------------------------------------------------------------
+    void SdlWindowLayer::getPaintBox(float &fillX, float &fillY) const {
+        fillX = fillScaleX;
+        fillY = fillScaleY;
+    }
+
     void SdlWindowLayer::RecalcPaintBox() {
         if(!LayerWidth || !LayerHeight)
             return;
@@ -662,7 +681,8 @@ namespace krkr::sdl3 {
     void SdlWindowLayer::SetVisible(bool bVisible) {
         // TVPWindow.cpp:526-538: revoke the current-window role before hiding
         // so queued ups are not delivered to an inactive layer.
-        if(!bVisible && currentWindowLayer == this) {
+        const bool wasCurrent = currentWindowLayer == this;
+        if(!bVisible && wasCurrent) {
             auto *next = prevWindow;
             while(next && (!next->Visible || !next->nativeWindow))
                 next = next->prevWindow;
@@ -676,6 +696,8 @@ namespace krkr::sdl3 {
         Visible = bVisible;
         if(bVisible)
             BringToFront();
+        else if(!bVisible && wasCurrent && DrawBufferCallback)
+            DrawBufferCallback(nullptr);
     }
 
     const char *SdlWindowLayer::GetCaption() { return caption.c_str(); }
@@ -734,10 +756,8 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::UpdateDrawBuffer(iTVPTexture2D *tex) {
-        // B3: compositor owns layer textures. Corresponds to
-        // TVPWindow.cpp:602-626 (adapter texture + texture rect swap + draw
-        // sprite scale).
-        (void)tex;
+        if(DrawBufferCallback && currentWindowLayer == this)
+            DrawBufferCallback(tex);
     }
 
     void SdlWindowLayer::InvalidateClose() {

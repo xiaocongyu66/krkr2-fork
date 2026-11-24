@@ -130,6 +130,9 @@ namespace krkr::render {
 
         KrkrGLFunctions &gl = krkrGL();
 
+        // Presentation always targets the SDL window's default framebuffer,
+        // regardless of an engine FBO left bound by the preceding frame.
+        gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
         // Letterbox clear (window background), then the policy rect.
         gl.glDisable(GL_BLEND); // BlendFunc::DISABLE (TVPWindow.cpp:626)
         gl.glViewport(0, 0, winW_, winH_);

@@ -259,7 +259,7 @@ namespace krkr::render {
         bool isBound() const { return bound; }
 
     private:
-        friend bool bindGL(void *(*loader)(const char *));
+        friend bool bindGL(SDL_FunctionPointer (*loader)(const char *));
         bool bound = false;
     };
 
@@ -270,7 +270,8 @@ namespace krkr::render {
     // symbol is missing; partial results are left in place for diagnosis.
     // B3 wiring passes SDL_GL_GetProcAddress (SdlAppDelegate owns the context
     // and has already made it current).
-    bool bindGL(void *(*loader)(const char *));
+    using GLProcLoader = SDL_FunctionPointer (*)(const char *);
+    bool bindGL(GLProcLoader loader);
 
     //---------------------------------------------------------------------------
     // KrkrRenderContext: GL context lifecycle wrapper.

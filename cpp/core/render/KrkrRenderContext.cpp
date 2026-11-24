@@ -34,7 +34,7 @@ namespace krkr::render {
 
     KrkrGLFunctions &krkrGL() { return gKrkrGL; }
 
-    bool bindGL(void *(*loader)(const char *)) {
+    bool bindGL(GLProcLoader loader) {
         if(!loader)
             return false;
         KrkrGLFunctions &gl = gKrkrGL;

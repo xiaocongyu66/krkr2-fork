@@ -1143,6 +1143,8 @@ public:
         return clr;
     }
 
+    unsigned int GetOGLTextureName() const override { return texture; }
+
     tjs_int GetPitch() const override {
         if(_scaleW == 1.f && _scaleH == 1.f)
             return internalW * 4;

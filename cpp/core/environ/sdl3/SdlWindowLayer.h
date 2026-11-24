@@ -101,6 +101,10 @@ namespace krkr::sdl3 {
         // the shell supplies the SDL display DPI (SdlAppDelegate::getDPI,
         // 96 * SDL_GetWindowDisplayScale).
         static void SetDpiProvider(std::function<float()> provider);
+        static void
+        SetDrawBufferCallback(std::function<void(iTVPTexture2D *)> callback);
+        static void SetCurrentWindowCallback(
+            std::function<void(SdlWindowLayer *)> callback);
 
         // --- iWindowLayer (cpp/core/visual/WindowLayer.h)
         // ----------------------
@@ -156,6 +160,9 @@ namespace krkr::sdl3 {
         // borderless fill). Pure state; the compositor consumes it (B3).
         void toggleFillScale();
         void RecalcPaintBox();
+        void getPaintBox(float &fillX, float &fillY) const;
+        [[nodiscard]] tjs_int GetLayerWidth() const { return LayerWidth; }
+        [[nodiscard]] tjs_int GetLayerHeight() const { return LayerHeight; }
 
     private:
         // geometry from RecalcPaintBox (TVPWindow.cpp:562-586)
@@ -242,6 +249,8 @@ namespace krkr::sdl3 {
         // Shell bridges (installed by SdlEngineRunner).
         static ImeModeListener imeModeListener;
         static std::function<float()> DpiProvider;
+        static std::function<void(iTVPTexture2D *)> DrawBufferCallback;
+        static std::function<void(SdlWindowLayer *)> CurrentWindowCallback;
     };
 
 } // namespace krkr::sdl3

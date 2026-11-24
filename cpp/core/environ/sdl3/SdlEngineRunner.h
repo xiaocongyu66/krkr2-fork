@@ -18,12 +18,17 @@
 //---------------------------------------------------------------------------
 
 #include "SdlAppDelegate.h"
+#include "KrkrCompositor.h"
+#include "KrkrRenderContext.h"
+#include "KrkrTexture.h"
+#include "KrkrViewportPolicy.h"
+#include "RenderManager.h"
 
 #include <string>
 
 namespace krkr::sdl3 {
 
-    class SdlEngineRunner {
+    class SdlEngineRunner : private render::KrkrTextureNameResolver {
     public:
         SdlEngineRunner();
         ~SdlEngineRunner();
@@ -49,6 +54,11 @@ namespace krkr::sdl3 {
         [[nodiscard]] SdlAppDelegate &appDelegate();
 
     private:
+        unsigned int resolve(const iTVPTexture2D *tex) override;
+        void acceptDrawBuffer(iTVPTexture2D *tex);
+        void presentFrame();
+        void updateViewportFromCurrentLayer();
+
         // SdlIMEDelegate adapter mirroring the cocos host's IMEDelegate
         // (MainScene.cpp:1240-1307): committed text becomes per-UTF-16-unit
         // OnKeyPress, deleteBackward becomes a VK_BACK pair on non-Win32, and
@@ -67,6 +77,12 @@ namespace krkr::sdl3 {
 
         SdlAppDelegate app;
         EngineIME imeAdapter;
+        render::KrkrRenderContext renderContext;
+        render::KrkrTexture surfaceTexture;
+        render::KrkrCompositor compositor;
+        render::KrkrViewportPolicy viewportPolicy;
+        iTVPTexture2D *pendingTexture = nullptr;
+        bool pendingTextureChanged = false;
     };
 
 } // namespace krkr::sdl3
