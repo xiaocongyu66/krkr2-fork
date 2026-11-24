@@ -118,6 +118,17 @@ else()
     find_library(XXHASH_LIBRARY NAMES xxhash)
     target_include_directories(${PROJECT_NAME} PRIVATE ${XXHASH_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} PRIVATE ${XXHASH_LIBRARY})
+
+    # The ogl renderer (RenderManager_ogl.cpp) calls raw GL and GLEW entry
+    # points; the cocos build gets these transitively through cocos2dx, so
+    # the SDL3 host configuration links them here -- after this module's own
+    # archive in link order, so the static archives actually resolve.
+    find_package(GLEW CONFIG REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE GLEW::GLEW)
+    if(LINUX)
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL)
+    endif()
 endif()
 
 find_package(JXR REQUIRED)
