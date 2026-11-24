@@ -105,6 +105,7 @@ def collect_backtrace(command, cwd, env, destination):
                     [gdb, "-batch", "-return-child-result",
                      "-ex", "set environment MALLOC_CHECK_=3",
                      "-ex", "set environment GLIBC_TUNABLES=glibc.malloc.check=3",
+                     "-ex", "break exit", "-ex", "break _exit",
                      "-ex", "run", "-ex", "thread apply all bt full",
                      "--args"] + command,
                     cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
