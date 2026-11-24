@@ -2,6 +2,9 @@
 
 #include <cstdio>
 
+// RenderManager_ogl.cpp:132 -- global scope on the engine side.
+extern void TVPResetGLExtensionInfo();
+
 namespace krkr::render {
 
     namespace {
@@ -214,7 +217,6 @@ namespace krkr::render {
     void resetGLExtensionInfo() {
         // Extension information belongs to a GL context and must be queried
         // again after recreation.
-        extern void TVPResetGLExtensionInfo();
         TVPResetGLExtensionInfo();
     }
 
