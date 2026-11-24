@@ -300,6 +300,10 @@ if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP)
 
     # Runtime resources: the same python sync the cocos app uses, without the
     # cocos resource helpers (cocos_mark_resources is a Cocos-only flow).
+    # Assets land next to the executable: the SDL3 host's LocalFileBackend
+    # resolves engine asset names (bare "NotoSansCJK-Regular.ttc", the
+    # locale "" prefix candidate) relative to the process CWD, which the
+    # smoke harness sets to the binary directory.
     set(GAME_RES_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     include(cmake/RuntimeAssets.cmake)
     if(LINUX OR WINDOWS)
@@ -310,7 +314,7 @@ if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP)
         add_custom_command(TARGET SYNC_RESOURCE-${KRKR2_SDL3_TARGET} POST_BUILD
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/sync_runtime_assets.py"
                 --source "${GAME_RES_FOLDER}"
-                --destination "$<TARGET_PROPERTY:${KRKR2_SDL3_TARGET},RUNTIME_OUTPUT_DIRECTORY>/${CMAKE_CFG_INTDIR}/Resources"
+                --destination "$<TARGET_PROPERTY:${KRKR2_SDL3_TARGET},RUNTIME_OUTPUT_DIRECTORY>/${CMAKE_CFG_INTDIR}"
                 --all "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-all.txt"
                 --selected "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets-selected.txt"
             VERBATIM)
