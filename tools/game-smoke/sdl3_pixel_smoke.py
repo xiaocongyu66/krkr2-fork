@@ -137,7 +137,6 @@ class X11:
         self.lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
         self._error_handler = XErrorHandlerFunc(_swallow_x11_error)
         self.lib.XSetErrorHandler.argtypes = [XErrorHandlerFunc]
-        self.lib.XSetErrorHandler.restype = [XErrorHandlerFunc]
         self.lib.XSetErrorHandler(self._error_handler)
         self.root = self.lib.XDefaultRootWindow(self.display)
         self.pid_atom = self.lib.XInternAtom(self.display, b"_NET_WM_PID", 0)
