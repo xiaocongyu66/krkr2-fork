@@ -94,16 +94,25 @@ def collect_backtrace(command, cwd, env, destination):
     gdb = shutil.which("gdb")
     if gdb is None:
         return
+    # Heap corruption aborts are layout-dependent: retry under gdb a few
+    # times so we actually catch one with MALLOC_CHECK_=3 enabled (glibc
+    # then aborts at the chunk that gets corrupted, not at a later free).
     bt_path = destination / "gdb-backtrace.log"
-    try:
-        with bt_path.open("wb") as log:
-            subprocess.run([gdb, "-batch", "-return-child-result",
-                            "-ex", "run", "-ex", "thread apply all bt full",
-                            "--args"] + command,
-                           cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
-                           env=env, timeout=120)
-    except Exception:
-        pass
+    for attempt in range(3):
+        try:
+            with bt_path.open("wb") as log:
+                result = subprocess.run(
+                    [gdb, "-batch", "-return-child-result",
+                     "-ex", "set environment MALLOC_CHECK_=3",
+                     "-ex", "set environment GLIBC_TUNABLES=glibc.malloc.check=3",
+                     "-ex", "run", "-ex", "thread apply all bt full",
+                     "--args"] + command,
+                    cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+                    env=env, timeout=120)
+            if b"received signal" in bt_path.read_bytes():
+                return
+        except Exception:
+            pass
 
 
 class X11:
