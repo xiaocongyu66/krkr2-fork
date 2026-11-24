@@ -2,6 +2,7 @@
 
 #include "SdlKeyCodeConv.h"
 #include "SdlWindowLayer.h"
+#include "KrkrRenderContext.h"
 
 #include "HostLifecycle.h" // TVPOnHostForeground/TVPOnHostBackground
 #include "WindowIntf.h" // tTVPOnKeyDown/KeyUp/CloseInputEvent
