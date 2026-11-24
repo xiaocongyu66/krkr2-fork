@@ -62,6 +62,8 @@ namespace krkr::render {
         KRKR_BIND(glClear);
         KRKR_BIND(glFlush);
         KRKR_BIND(glGetIntegerv);
+        KRKR_BIND(glGetVertexAttribiv);
+        KRKR_BIND(glGetFloatv);
         KRKR_BIND(glUseProgram);
         KRKR_BIND(glCreateShader);
         KRKR_BIND(glShaderSource);
@@ -91,15 +93,15 @@ namespace krkr::render {
             gl.glBindBuffer && gl.glBindFramebuffer && gl.glBlendFunc &&
             gl.glEnable && gl.glDisable && gl.glIsEnabled && gl.glViewport &&
             gl.glClearColor && gl.glClear && gl.glFlush && gl.glGetIntegerv &&
-            gl.glUseProgram && gl.glCreateShader && gl.glCreateProgram &&
-            gl.glShaderSource && gl.glCompileShader && gl.glAttachShader &&
-            gl.glDetachShader && gl.glLinkProgram && gl.glDeleteShader &&
-            gl.glDeleteProgram && gl.glBindAttribLocation &&
-            gl.glGetUniformLocation && gl.glUniform1i && gl.glGetShaderiv &&
-            gl.glGetProgramiv && gl.glGetShaderInfoLog &&
-            gl.glGetProgramInfoLog && gl.glEnableVertexAttribArray &&
-            gl.glDisableVertexAttribArray && gl.glVertexAttribPointer &&
-            gl.glDrawArrays;
+            gl.glGetVertexAttribiv && gl.glGetFloatv && gl.glUseProgram &&
+            gl.glCreateShader && gl.glCreateProgram && gl.glShaderSource &&
+            gl.glCompileShader && gl.glAttachShader && gl.glDetachShader &&
+            gl.glLinkProgram && gl.glDeleteShader && gl.glDeleteProgram &&
+            gl.glBindAttribLocation && gl.glGetUniformLocation &&
+            gl.glUniform1i && gl.glGetShaderiv && gl.glGetProgramiv &&
+            gl.glGetShaderInfoLog && gl.glGetProgramInfoLog &&
+            gl.glEnableVertexAttribArray && gl.glDisableVertexAttribArray &&
+            gl.glVertexAttribPointer && gl.glDrawArrays;
         return gl.bound;
     }
 

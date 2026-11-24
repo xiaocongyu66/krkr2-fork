@@ -119,6 +119,12 @@ namespace krkr::render {
 #ifndef GL_COLOR_BUFFER_BIT
 #define GL_COLOR_BUFFER_BIT 0x4000
 #endif
+#ifndef GL_VERTEX_ATTRIB_ARRAY_ENABLED
+#define GL_VERTEX_ATTRIB_ARRAY_ENABLED 0x8622
+#endif
+#ifndef GL_COLOR_CLEAR_VALUE
+#define GL_COLOR_CLEAR_VALUE 0x0C22
+#endif
 #ifndef GL_TRIANGLE_STRIP
 #define GL_TRIANGLE_STRIP 0x0005
 #endif
@@ -179,6 +185,9 @@ namespace krkr::render {
         typedef void (*ClearFunc)(GLbitfield mask);
         typedef void (*FlushFunc)(void);
         typedef void (*GetIntegervFunc)(GLenum pname, GLint *data);
+        typedef void (*GetVertexAttribivFunc)(GLuint index, GLenum pname,
+                                              GLint *data);
+        typedef void (*GetFloatvFunc)(GLenum pname, GLfloat *data);
         typedef void (*UseProgramFunc)(GLuint program);
         typedef GLuint (*CreateShaderFunc)(GLenum type);
         typedef void (*ShaderSourceFunc)(GLuint shader, GLsizei count,
@@ -233,6 +242,8 @@ namespace krkr::render {
         ClearFunc glClear = nullptr;
         FlushFunc glFlush = nullptr;
         GetIntegervFunc glGetIntegerv = nullptr;
+        GetVertexAttribivFunc glGetVertexAttribiv = nullptr;
+        GetFloatvFunc glGetFloatv = nullptr;
         UseProgramFunc glUseProgram = nullptr;
         CreateShaderFunc glCreateShader = nullptr;
         ShaderSourceFunc glShaderSource = nullptr;
