@@ -62,7 +62,7 @@ namespace krkr::sdl3 {
         // SdlIMEDelegate adapter mirroring the cocos host's IMEDelegate
         // (MainScene.cpp:1240-1307): committed text becomes per-UTF-16-unit
         // OnKeyPress, deleteBackward becomes a VK_BACK pair on non-Win32, and
-        // preedit is recorded only (the desktop engine never consumed it).
+        // preedit updates are delivered as complete strings through OnKeyPress.
         class EngineIME : public SdlIMEDelegate {
         public:
             void insertText(const char *text, std::size_t len) override;

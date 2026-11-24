@@ -129,6 +129,7 @@ bool TVPCheckGLExtension(const std::string &extname) {
     return sTVPGLExtensions.find(extname) != sTVPGLExtensions.end();
 }
 static bool TVPGLExtensionInfoInited = false;
+void TVPResetGLExtensionInfo() { TVPGLExtensionInfoInited = false; }
 static void TVPInitGLExtensionInfo() {
     if(TVPGLExtensionInfoInited)
         return;

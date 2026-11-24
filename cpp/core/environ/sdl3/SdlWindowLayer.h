@@ -105,6 +105,7 @@ namespace krkr::sdl3 {
         SetDrawBufferCallback(std::function<void(iTVPTexture2D *)> callback);
         static void SetCurrentWindowCallback(
             std::function<void(SdlWindowLayer *)> callback);
+        static void SetModalPump(std::function<bool()> pump);
 
         // --- iWindowLayer (cpp/core/visual/WindowLayer.h)
         // ----------------------
@@ -195,6 +196,7 @@ namespace krkr::sdl3 {
         tTJSNI_Window *nativeWindow;
 
         std::string caption;
+        ttstr hintText;
         bool Visible = false;
         bool Closing = false, ProgramClosing = false, CanCloseWork = false;
         bool inMode = false; // modal (ShowWindowAsModal)
@@ -251,6 +253,7 @@ namespace krkr::sdl3 {
         static std::function<float()> DpiProvider;
         static std::function<void(iTVPTexture2D *)> DrawBufferCallback;
         static std::function<void(SdlWindowLayer *)> CurrentWindowCallback;
+        static std::function<bool()> ModalPump;
     };
 
 } // namespace krkr::sdl3

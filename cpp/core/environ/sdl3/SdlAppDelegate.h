@@ -20,6 +20,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 // Forward declaration of the engine window-native base (WindowIntf.h), so
 // this header does not need to include the engine window interface chain.
@@ -40,11 +41,10 @@ namespace krkr::sdl3 {
         virtual ~SdlIMEDelegate() = default;
         // Committed text (UTF-8).
         virtual void insertText(const char *text, std::size_t len) = 0;
-        // Backspace while composing (non-Win32 hosts post VK_BACK down/up).
+        // Backspace while text input is active (non-Win32 hosts post VK_BACK
+        // down/up).
         virtual void deleteBackward() = 0;
-        // Active preedit string and the selection span inside it. Desktop
-        // builds never had preedit before; reaching parity needs OnKeyPress
-        // plumbing beyond this interface (B2-2).
+        // Complete active preedit string and selection span from SDL.
         virtual void setPreedit(const char *text, int start, int length) = 0;
     };
 
@@ -74,6 +74,7 @@ namespace krkr::sdl3 {
         // callback (the Application->Run() hook, MainScene.cpp:747-748), swap.
         void run();
         void stop();
+        bool pumpModalFrame();
 
         void setFullscreen(bool fullscreen);
         [[nodiscard]] bool isFullscreen() const;
@@ -94,17 +95,16 @@ namespace krkr::sdl3 {
         using CloseQueryCallback = std::function<bool()>;
         void setCloseQueryCallback(CloseQueryCallback callback);
 
-        // GL context loss / drawable size change. The engine side must dispatch
-        // EVENT_RENDERER_RECREATED (ogl:2968-2980, YUVSprite.cpp:43-57) and
-        // reset TVPGLExtensionInfoInited (ogl:122). Both actions have stub
-        // bodies here pending the B3 engine-side adapter; this callback is the
-        // wire point.
+        // GL context loss / drawable size change hooks. SDL_GL has no renderer-
+        // reset event; context loss is reported explicitly before detaching so
+        // resources can forget names belonging to the old context.
         using DrawableSizeCallback = std::function<void()>;
         void setDrawableSizeCallback(DrawableSizeCallback callback);
         using ContextLostCallback = std::function<void()>;
         void setContextLostCallback(ContextLostCallback callback);
         [[nodiscard]] ContextLostCallback getContextLostCallback() const;
-
+        // Explicit invalidation entry point; invoke before context teardown.
+        void notifyContextLost();
         // IME: starts/stops SDL text input on the shell window. Driven by the
         // engine-side IME-mode bridge installed via
         // SdlWindowLayer::SetImeModeListener (SdlEngineRunner wires it).
@@ -150,10 +150,6 @@ namespace krkr::sdl3 {
         // TVPWindowLayer::CancelInput semantics.
         void cancelInputOnFocusLoss();
 
-        // Context-lost plumbing (see setContextLostCallback). Both perform
-        // their named action through the B3 engine-side adapter; bodies
-        // documented in the .cpp.
-        void notifyContextLost();
         void dispatchRendererRecreated();
         void resetGLExtensionInfoInited();
 
@@ -176,8 +172,12 @@ namespace krkr::sdl3 {
         DrawableSizeCallback drawableSizeCallback;
         ContextLostCallback contextLostCallback;
         SdlIMEDelegate *imeDelegate = nullptr;
+        bool textInputEnabled = false;
 
         std::unordered_map<SDL_JoystickID, SDL_Gamepad *> gamepads;
+        std::unordered_map<SDL_JoystickID,
+                           std::unordered_map<int, std::uint32_t>>
+            gamepadAxisKeys;
     };
 
 } // namespace krkr::sdl3

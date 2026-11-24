@@ -28,6 +28,7 @@ namespace krkr::sdl3 {
     std::function<float()> SdlWindowLayer::DpiProvider;
     std::function<void(iTVPTexture2D *)> SdlWindowLayer::DrawBufferCallback;
     std::function<void(SdlWindowLayer *)> SdlWindowLayer::CurrentWindowCallback;
+    std::function<bool()> SdlWindowLayer::ModalPump;
 
     SdlWindowLayer::SdlWindowLayer(tTJSNI_Window *window) :
         nativeWindow(window) {
@@ -88,6 +89,10 @@ namespace krkr::sdl3 {
     void SdlWindowLayer::SetCurrentWindowCallback(
         std::function<void(SdlWindowLayer *)> callback) {
         CurrentWindowCallback = std::move(callback);
+    }
+
+    void SdlWindowLayer::SetModalPump(std::function<bool()> pump) {
+        ModalPump = std::move(pump);
     }
 
     void SdlWindowLayer::notifyImeMode() {
@@ -616,9 +621,7 @@ namespace krkr::sdl3 {
 
     bool SdlWindowLayer::GetFormEnabled() { return Visible; }
 
-    void SdlWindowLayer::SetDefaultMouseCursor() {
-        // Cursor painting is compositor-side (B3); nothing to draw yet.
-    }
+    void SdlWindowLayer::SetDefaultMouseCursor() { SDL_ShowCursor(true); }
 
     void SdlWindowLayer::GetCursorPos(tjs_int &x, tjs_int &y) {
         x = LastMouseX;
@@ -633,7 +636,8 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::SetHintText(const ttstr &text) {
-        // Tooltips are compositor-side (B3).
+        hintText = text;
+        // SDL shell has no per-layer tooltip UI yet.
     }
 
     void SdlWindowLayer::SetAttentionPoint(tjs_int left, tjs_int top,
@@ -662,17 +666,16 @@ namespace krkr::sdl3 {
     }
 
     void SdlWindowLayer::ShowWindowAsModal() {
-        // B3: the cocos host ran a nested
-        // TVPDrawSceneOnce/TVPProcessInputEvents loop here
-        // (TVPWindow.cpp:498-523). The SDL shell must pump SdlAppDelegate's
-        // event loop instead; that wiring needs the shell pointer, so until
-        // then this only makes the layer current.
         inMode = true;
         SetVisible(true);
         BringToFront();
         modalResult = 0;
-        // TODO(B3): while(this == currentWindowLayer && !modalResult) {
-        //              shell->pumpOnce(); }
+        while(this == currentWindowLayer && !modalResult && nativeWindow) {
+            if(!ModalPump || !ModalPump()) {
+                modalResult = 2; // mrCancel when the engine or SDL exits.
+                break;
+            }
+        }
         inMode = false;
     }
 
@@ -764,6 +767,7 @@ namespace krkr::sdl3 {
         // TVPWindow.cpp:58-61: detach the native instance before destruction.
         nativeWindow = nullptr;
         leaveCurrentWindow();
+        delete this;
     }
 
     bool SdlWindowLayer::GetWindowActive() {

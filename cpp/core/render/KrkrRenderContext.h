@@ -343,12 +343,7 @@ namespace krkr::render {
     // Returns 0 on compile/link failure (details go to stderr).
     GLuint compileProgram(const char *vertexShader, const char *fragmentShader);
 
-    // Reset the engine renderer's GL extension info (TVPGLExtensionInfoInited,
-    // RenderManager_ogl.cpp:123) so a recreated context re-queries
-    // glGetString(GL_EXTENSIONS).
-    // TODO(B3+): needs an engine-side export (e.g. TVPResetGLExtensionInfo in
-    // core_visual); stub body until the engine symbol exists. B3 context-loss
-    // wiring (SdlAppDelegate::resetGLExtensionInfoInited) calls this hook.
+    // Reset extension state so a recreated context re-queries GL extensions.
     void resetGLExtensionInfo();
 
 } // namespace krkr::render

@@ -36,11 +36,8 @@ std::string TVPGetCurrentLanguage(); // environ/linux/Platform.cpp:104 etc.
 //---------------------------------------------------------------------------
 
 // WindowImpl.cpp:1130 calls this when a Window TJS object is constructed.
-// Lifetime note: the engine drops the returned layer in
-// tTJSNI_Window::Invalidate without deleting it (identical to the cocos
-// host's WindowImpl contract; the scene graph freed it there). The SDL host
-// has no scenegraph, so a closed layer leaks until process exit -- the B3
-// window lifecycle owns the real fix, matching the engine contract today.
+// The engine calls InvalidateClose() during tTJSNI_Window::Invalidate; the SDL
+// layer deletes itself there, matching the cocos scenegraph's removeFromParent.
 iWindowLayer *TVPCreateAndAddWindow(tTJSNI_Window *w) {
     return new krkr::sdl3::SdlWindowLayer(w);
 }
@@ -179,6 +176,7 @@ namespace krkr::sdl3 {
         surfaceTexture.release();
         compositor.invalidate();
         render::KrkrTexture::setNameResolver(nullptr);
+        app.notifyContextLost();
         renderContext.detach();
     }
 
@@ -281,6 +279,7 @@ namespace krkr::sdl3 {
             [this](iTVPTexture2D *tex) { acceptDrawBuffer(tex); });
         SdlWindowLayer::SetCurrentWindowCallback(
             [this](SdlWindowLayer *) { acceptDrawBuffer(nullptr); });
+        SdlWindowLayer::SetModalPump([this] { return app.pumpModalFrame(); });
         app.setDrawableSizeCallback([this] {
             int width = 0, height = 0;
             app.getWindowSizeInPixels(width, height);
@@ -363,12 +362,20 @@ namespace krkr::sdl3 {
 
     void SdlEngineRunner::EngineIME::setPreedit(const char *text, int start,
                                                 int length) {
-        // New capability: the desktop hosts never surfaced the composing
-        // string to the engine. Record it for a later phase that plumbs
-        // preedit into Window.OnKeyPress / an independent composition event.
+        // The engine exposes no composition/preedit API; mirror its existing
+        // committed-text path by delivering this complete update as keypresses.
+        // SDL_TEXTEDITING offsets are UTF-8 byte offsets, so convert the full
+        // string and do not forward the offsets as UTF-16 indices.
         preedit = text ? std::string(text) : std::string();
         preeditStart = start;
         preeditLength = length;
+        auto *layer = SdlWindowLayer::GetCurrentWindowLayer();
+        if(!layer)
+            return;
+        if(auto units = krkr::input::decodeTextInput(preedit))
+            for(auto unit : *units)
+                layer->OnKeyPress(static_cast<tjs_uint16>(unit), 0, false,
+                                  false);
     }
 
 } // namespace krkr::sdl3

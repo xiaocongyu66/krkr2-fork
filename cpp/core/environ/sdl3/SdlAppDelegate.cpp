@@ -12,6 +12,7 @@
 #include "InputState.h" // krkr::input::sharedState()
 #include "InputModifiers.h" // krkr::input::key::*
 
+#include <algorithm>
 #include <cstring>
 
 namespace krkr::sdl3 {
@@ -131,6 +132,18 @@ namespace krkr::sdl3 {
 
     void SdlAppDelegate::stop() { running = false; }
 
+    bool SdlAppDelegate::pumpModalFrame() {
+        if(!running || !window)
+            return false;
+        pollEvents();
+        if(!running)
+            return false;
+        if(frameCallback)
+            frameCallback();
+        SDL_GL_SwapWindow(window);
+        return running;
+    }
+
     void SdlAppDelegate::setFullscreen(bool fullscreen) {
         if(!window)
             return;
@@ -166,6 +179,7 @@ namespace krkr::sdl3 {
     }
 
     void SdlAppDelegate::setTextInputEnabled(bool enabled) {
+        textInputEnabled = enabled;
         if(!window)
             return;
         if(enabled)
@@ -335,6 +349,21 @@ namespace krkr::sdl3 {
                     break;
 
                 case SDL_EVENT_GAMEPAD_REMOVED: {
+                    auto keys = gamepadAxisKeys.find(event.gdevice.which);
+                    if(keys != gamepadAxisKeys.end()) {
+                        for(const auto &axis : keys->second) {
+                            const auto vk = axis.second;
+                            const bool alsoHeld = std::any_of(
+                                keys->second.begin(), keys->second.end(),
+                                [vk, &axis](const auto &other) {
+                                    return other.first != axis.first &&
+                                        other.second == vk;
+                                });
+                            if(!alsoHeld)
+                                postVirtualKey(vk, false, false);
+                        }
+                        gamepadAxisKeys.erase(keys);
+                    }
                     auto it = gamepads.find(event.gdevice.which);
                     if(it != gamepads.end()) {
                         SDL_CloseGamepad(it->second);
@@ -355,13 +384,76 @@ namespace krkr::sdl3 {
                     break;
                 }
 
-                case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-                    // TODO(B3): analog axis -> VK hook. The cocos host surface
-                    // is only the triggers via TVPConvertSDLGamepadAxisToVK
-                    // (CCKeyCodeConv.cpp:268-271); decide the press/release
-                    // threshold (and VK_PADLEFT/RIGHT for stick tilt) with the
-                    // engine input team, then post through postVirtualKey().
+                case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+                    if(!focused)
+                        break;
+                    constexpr Sint16 stickThreshold = 8000;
+                    const auto axis =
+                        static_cast<SDL_GamepadAxis>(event.gaxis.axis);
+                    const Sint16 value = event.gaxis.value;
+                    std::uint32_t vk = TVPConvertSDLGamepadAxisToVK(axis);
+                    bool down = false;
+                    if(vk) {
+                        // SDL trigger values are unsigned pressure mapped to
+                        // [0, 32767]; any positive value is a press.
+                        down = value > 0;
+                    } else {
+                        switch(axis) {
+                            case SDL_GAMEPAD_AXIS_LEFTX:
+                            case SDL_GAMEPAD_AXIS_RIGHTX:
+                                if(value <= -stickThreshold) {
+                                    vk = VK_PADLEFT;
+                                    down = true;
+                                } else if(value >= stickThreshold) {
+                                    vk = VK_PADRIGHT;
+                                    down = true;
+                                }
+                                break;
+                            case SDL_GAMEPAD_AXIS_LEFTY:
+                            case SDL_GAMEPAD_AXIS_RIGHTY:
+                                if(value <= -stickThreshold) {
+                                    vk = VK_PADUP;
+                                    down = true;
+                                } else if(value >= stickThreshold) {
+                                    vk = VK_PADDOWN;
+                                    down = true;
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    const auto id = event.gaxis.which;
+                    auto &held = gamepadAxisKeys[id];
+                    const auto axisIndex = static_cast<std::size_t>(axis);
+                    if(axisIndex >= held.size())
+                        break;
+                    const std::uint32_t previous = held[axisIndex];
+                    if(previous == vk && down)
+                        break;
+                    if(previous) {
+                        const bool stillHeld = std::any_of(
+                            held.begin(), held.end(),
+                            [previous, axisIndex](const auto &entry) {
+                                return entry.first != axisIndex &&
+                                    entry.second == previous;
+                            });
+                        if(!stillHeld)
+                            postVirtualKey(previous, false, false);
+                    }
+                    held[axisIndex] = vk && down ? vk : 0;
+                    if(vk && down && previous != vk) {
+                        const bool alreadyHeld =
+                            std::any_of(held.begin(), held.end(),
+                                        [vk, axisIndex](const auto &entry) {
+                                            return entry.first != axisIndex &&
+                                                entry.second == vk;
+                                        });
+                        if(!alreadyHeld)
+                            postVirtualKey(vk, true, false);
+                    }
                     break;
+                }
 
                 default:
                     break;
@@ -436,6 +528,13 @@ namespace krkr::sdl3 {
             return; // unmapped, or beyond sharedState()'s 0x200-entry table
         if(!focused)
             return; // drop keys while unfocused (prototype main.cpp:352-357)
+        // SDL3 has no TEXTEDITING_DEL event. While text input is active,
+        // forward Backspace through the IME delegate's cocos-compatible
+        // deleteBackward path instead of also posting it as a regular key.
+        if(textInputEnabled && imeDelegate && vk == VK_BACK && event.down) {
+            imeDelegate->deleteBackward();
+            return;
+        }
         postVirtualKey(vk, event.down, event.repeat);
     }
 
@@ -503,22 +602,13 @@ namespace krkr::sdl3 {
     }
 
     void SdlAppDelegate::dispatchRendererRecreated() {
-        // B3 TODO (engine-side adapter): the cocos host dispatched
-        //   cocos2d::Director::getInstance()->getEventDispatcher()
-        //       ->dispatchCustomEvent(EVENT_RENDERER_RECREATED);
-        // with listeners at RenderManager_ogl.cpp:2968-2980 (render-method
-        // rebuild) and YUVSprite.cpp:43-57 (texture re-upload). The SDL shell
-        // owns no Director, so the actual dispatch moves into the adapter
-        // installed via setContextLostCallback(); keep this body and the string
-        // constant documented until that wiring exists.
+        // The renderer-recreated event requires the cocos Director; SDL
+        // invalidates its render resources through the context-lost callback.
     }
 
     void SdlAppDelegate::resetGLExtensionInfoInited() {
-        // B3 TODO (engine-side adapter): TVPGLExtensionInfoInited is a
-        // file-static in RenderManager_ogl.cpp:122 guarding idempotent GL
-        // extension queries (ogl:123-126). After a context loss the guard must
-        // be reset before the next query; the engine must export a reset entry
-        // point for the SDL shell to call here.
+        // A new context requires extension information to be queried again.
+        render::resetGLExtensionInfo();
     }
 
     bool SdlAppDelegate::allowClose() const {

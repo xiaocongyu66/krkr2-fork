@@ -210,13 +210,10 @@ namespace krkr::render {
     }
 
     void resetGLExtensionInfo() {
-        // TODO(B3+): engine export required. RenderManager_ogl.cpp:123 keeps
-        // TVPGLExtensionInfoInited static; on context loss the extension string
-        // must be re-queried on the new context (glGetString values do not
-        // carry over). SdlAppDelegate::resetGLExtensionInfoInited calls this
-        // hook; the real reset belongs to core_visual (e.g. exporting
-        // TVPInitGLExtensionInfo + a flag clear) and is out of scope for this
-        // module per the B3 boundary.
+        // Extension information belongs to a GL context and must be queried
+        // again after recreation.
+        extern void TVPResetGLExtensionInfo();
+        TVPResetGLExtensionInfo();
     }
 
 } // namespace krkr::render
