@@ -86,6 +86,33 @@ def _swallow_x11_error(display, event):
     return 0
 
 
+GDB_SCRIPT = """import gdb
+
+class LogThrow(gdb.Breakpoint):
+    def __init__(self):
+        super().__init__("_cxa_throw", internal=False)
+        self.silent = True
+    def stop(self):
+        gdb.write("CXA_THROW:\\n" + gdb.execute("bt 16", to_string=True))
+        return False
+
+class LogAbort(gdb.Breakpoint):
+    def __init__(self, spec):
+        super().__init__(spec, internal=False)
+        self.silent = True
+    def stop(self):
+        gdb.write("HIT " + self.location + ":\\n" +
+                  gdb.execute("bt 20", to_string=True))
+        return False  # stop here would be better, but keep logging all hits
+
+LogThrow()
+LogAbort("exit")
+LogAbort("_exit")
+gdb.execute("set pagination off")
+gdb.write("SCRIPT_LOADED\\n")
+"""
+
+
 def collect_backtrace(command, cwd, env, destination):
     """On an engine crash, rerun under gdb and save a backtrace artifact.
 
@@ -94,26 +121,24 @@ def collect_backtrace(command, cwd, env, destination):
     gdb = shutil.which("gdb")
     if gdb is None:
         return
-    # Heap corruption aborts are layout-dependent: retry under gdb a few
-    # times so we actually catch one with MALLOC_CHECK_=3 enabled (glibc
-    # then aborts at the chunk that gets corrupted, not at a later free).
+    # The engine startup swallows exceptions (EAbort etc.) and the heap
+    # abort is layout-dependent: log every C++ throw plus exit() calls with
+    # backtraces under MALLOC_CHECK_=3, then let it run to the end.
     bt_path = destination / "gdb-backtrace.log"
-    for attempt in range(3):
-        try:
-            with bt_path.open("wb") as log:
-                result = subprocess.run(
-                    [gdb, "-batch", "-return-child-result",
-                     "-ex", "set environment MALLOC_CHECK_=3",
-                     "-ex", "set environment GLIBC_TUNABLES=glibc.malloc.check=3",
-                     "-ex", "break exit", "-ex", "break _exit",
-                     "-ex", "run", "-ex", "thread apply all bt full",
-                     "--args"] + command,
-                    cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
-                    env=env, timeout=120)
-            if b"received signal" in bt_path.read_bytes():
-                return
-        except Exception:
-            pass
+    script_path = destination / "gdb-throws.py"
+    script_path.write_text(GDB_SCRIPT, encoding="utf-8")
+    try:
+        with bt_path.open("wb") as log:
+            subprocess.run([gdb, "-batch", "-return-child-result",
+                            "-ex", "set environment MALLOC_CHECK_=3",
+                            "-ex", "set environment GLIBC_TUNABLES=glibc.malloc.check=3",
+                            "-x", str(script_path),
+                            "-ex", "run",
+                            "--args"] + command,
+                           cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+                           env=env, timeout=180)
+    except Exception:
+        pass
 
 
 class X11:
