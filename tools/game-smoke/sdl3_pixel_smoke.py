@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -83,6 +84,26 @@ def _swallow_x11_error(display, event):
     # Window enumeration races: a window can vanish between XQueryTree and
     # XGetWindowProperty. Without a handler, Xlib aborts the harness.
     return 0
+
+
+def collect_backtrace(command, cwd, env, destination):
+    """On an engine crash, rerun under gdb and save a backtrace artifact.
+
+    Diagnostic only: does not change pass/fail.
+    """
+    gdb = shutil.which("gdb")
+    if gdb is None:
+        return
+    bt_path = destination / "gdb-backtrace.log"
+    try:
+        with bt_path.open("wb") as log:
+            subprocess.run([gdb, "-batch", "-return-child-result",
+                            "-ex", "run", "-ex", "thread apply all bt full",
+                            "--args"] + command,
+                           cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+                           env=env, timeout=120)
+    except Exception:
+        pass
 
 
 class X11:
@@ -288,7 +309,10 @@ def run(engine, destination, wrong_marker=False):
                 window = None
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
-                        raise RuntimeError(f"Engine exited early with {process.returncode}")
+                        collect_backtrace(command, engine.parent, env,
+                                          destination)
+                        raise RuntimeError(
+                            f"Engine exited early with {process.returncode}")
                     try:
                         window = x11.find_window(process.pid)
                         if x11.geometry(window) == (WIDTH, HEIGHT):
