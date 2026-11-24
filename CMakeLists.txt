@@ -290,7 +290,15 @@ if(KRKR2_BUILD_SDL3_APP AND NOT KRKR2_BUILD_APP)
     add_executable(${KRKR2_SDL3_TARGET}
         ${KRKR2CORE_PATH}/environ/sdl3/main.cpp
     )
-    target_link_libraries(${KRKR2_SDL3_TARGET} PRIVATE krkr2core)
+    # The engine ogl renderer (core_visual_module) calls raw GL and GLEW
+    # entry points; the SDL3 shell has no scenegraph providing them, so the
+    # executable links the GL stack directly (cocos app gets these via cocos2dx).
+    find_package(GLEW CONFIG REQUIRED)
+    target_link_libraries(${KRKR2_SDL3_TARGET} PRIVATE krkr2core GLEW::GLEW)
+    if(LINUX)
+        find_package(OpenGL REQUIRED)
+        target_link_libraries(${KRKR2_SDL3_TARGET} PRIVATE OpenGL::GL)
+    endif()
     set_target_properties(${KRKR2_SDL3_TARGET} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${KRKR2_SDL3_TARGET}"
     )
