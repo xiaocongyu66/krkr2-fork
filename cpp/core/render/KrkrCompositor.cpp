@@ -31,6 +31,18 @@ namespace krkr::render {
             "{\n"
             "    gl_FragColor = texture2D(u_texture, v_texCoord);\n"
             "}\n";
+
+        // Debug: visualize the texcoord field (u -> red, v -> green) to
+        // reveal whatever mapping the rasterizer is actually applying.
+        const char *kSurfaceFragmentShaderTexcoordView =
+            "#ifdef GL_ES\n"
+            "precision mediump float;\n"
+            "#endif\n"
+            "varying vec2 v_texCoord;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_FragColor = vec4(v_texCoord, 0.0, 1.0);\n"
+            "}\n";
     } // namespace
 
     //---------------------------------------------------------------------------
@@ -128,7 +140,10 @@ namespace krkr::render {
     void KrkrCompositor::ensureProgram() {
         if(program_)
             return;
-        program_ = compileProgram(kSurfaceVertexShader, kSurfaceFragmentShader);
+        const char *fs = kSurfaceFragmentShader;
+        if(std::getenv("KRKR_SDL3_TEXCOORD_VIEW"))
+            fs = kSurfaceFragmentShaderTexcoordView;
+        program_ = compileProgram(kSurfaceVertexShader, fs);
         if(!program_) {
             std::fprintf(stderr, "krkr::render: surface shader build failed\n");
             return;
