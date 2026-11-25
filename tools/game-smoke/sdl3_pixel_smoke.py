@@ -127,6 +127,8 @@ def collect_backtrace(command, cwd, env, destination):
     bt_path = destination / "gdb-backtrace.log"
     script_path = destination / "gdb-throws.py"
     script_path.write_text(GDB_SCRIPT, encoding="utf-8")
+    # The gdb child runs with cwd=engine.parent, not the launcher's cwd.
+    script_path = script_path.resolve()
     try:
         with bt_path.open("wb") as log:
             subprocess.run([gdb, "-batch", "-return-child-result",
