@@ -136,6 +136,7 @@ def collect_backtrace(command, cwd, env, destination):
                             "-ex", "set environment GLIBC_TUNABLES=glibc.malloc.check=3",
                             "-x", str(script_path),
                             "-ex", "run",
+                            "-ex", "thread apply all bt 25",
                             "--args"] + command,
                            cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
                            env=env, timeout=180)
