@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <thread>
@@ -175,6 +176,47 @@ const std::string &TVPGetInternalPreferencePath() {
 namespace krkr::sdl3 {
 
     namespace {
+        void writePPMTopDown(const char *path, int w, int h,
+                             const std::uint8_t *rgbaTopDown) {
+            if(std::FILE *f = std::fopen(path, "wb")) {
+                std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+                std::vector<std::uint8_t> row((size_t)w * 3);
+                for(int y = 0; y < h; ++y) {
+                    const std::uint8_t *src = rgbaTopDown + (size_t)y * w * 4;
+                    for(int x = 0; x < w; ++x) {
+                        row[x * 3 + 0] = src[x * 4 + 0];
+                        row[x * 3 + 1] = src[x * 4 + 1];
+                        row[x * 3 + 2] = src[x * 4 + 2];
+                    }
+                    std::fwrite(row.data(), 1, row.size(), f);
+                }
+                std::fclose(f);
+            }
+        }
+
+        // Diagnostic only (KRKR_SDL3_DUMP_FRAMEBUFFER): read the window's
+        // default framebuffer right after the compositor draw (before
+        // SwapWindow) so a bad composite can be told apart from a bad X11
+        // capture.
+        void dumpWindowFramebuffer(const char *path) {
+            GLint viewport[4] = { 0, 0, 0, 0 };
+            glGetIntegerv(GL_VIEWPORT, viewport);
+            const int w = viewport[2];
+            const int h = viewport[3];
+            if(w <= 0 || h <= 0)
+                return;
+            std::vector<std::uint8_t> buf((size_t)w * h * 4);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+            std::vector<std::uint8_t> flipped((size_t)w * h * 4);
+            for(int y = 0; y < h; ++y) {
+                std::memcpy(flipped.data() + (size_t)y * w * 4,
+                            buf.data() + (size_t)(h - 1 - y) * w * 4,
+                            (size_t)w * 4);
+            }
+            writePPMTopDown(path, w, h, flipped.data());
+        }
+
         // Diagnostic only (KRKR_SDL3_DUMP_SURFACE): sample the adopted engine
         // surface texture through a scratch FBO and write a PPM, so a bad
         // present mapping can be told apart from bad engine texture content.
@@ -209,21 +251,13 @@ namespace krkr::sdl3 {
             glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
             glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
             glDeleteFramebuffers(1, &fbo);
-            if(std::FILE *f = std::fopen(path, "wb")) {
-                std::fprintf(f, "P6\n%d %d\n255\n", w, h);
-                std::vector<std::uint8_t> row((size_t)w * 3);
-                for(int y = 0; y < h; ++y) {
-                    const std::uint8_t *src =
-                        buf.data() + (size_t)(h - 1 - y) * w * 4;
-                    for(int x = 0; x < w; ++x) {
-                        row[x * 3 + 0] = src[x * 4 + 0];
-                        row[x * 3 + 1] = src[x * 4 + 1];
-                        row[x * 3 + 2] = src[x * 4 + 2];
-                    }
-                    std::fwrite(row.data(), 1, row.size(), f);
-                }
-                std::fclose(f);
+            std::vector<std::uint8_t> flipped((size_t)w * h * 4);
+            for(int y = 0; y < h; ++y) {
+                std::memcpy(flipped.data() + (size_t)y * w * 4,
+                            buf.data() + (size_t)(h - 1 - y) * w * 4,
+                            (size_t)w * 4);
             }
+            writePPMTopDown(path, w, h, flipped.data());
 #endif
         }
     } // namespace
@@ -308,22 +342,27 @@ namespace krkr::sdl3 {
             scaleX, scaleY);
         compositor.draw();
         compositor.flush();
-        if(const char *dump = std::getenv("KRKR_SDL3_DUMP_SURFACE")) {
-            // The engine may recreate its draw-buffer texture mid-run; sample
-            // a few frames spread over the run, not just the first.
-            static int frame = 0;
-            static const int frames[] = { 1, 30, 60, 120, 240, 480, 960 };
-            ++frame;
-            for(int k : frames) {
-                if(frame == k) {
-                    std::string path = dump;
-                    path += ".";
-                    path += std::to_string(k);
-                    path += ".ppm";
-                    dumpSurfaceTexture(surfaceTexture, path.c_str());
-                    break;
-                }
+        // Snapshot pattern shared by both diagnostics.
+        static int dumpFrame = 0;
+        static const int dumpFrames[] = { 1, 30, 60, 120, 240, 480, 960 };
+        ++dumpFrame;
+        for(int k : dumpFrames) {
+            if(dumpFrame != k)
+                continue;
+            if(const char *dump = std::getenv("KRKR_SDL3_DUMP_SURFACE")) {
+                std::string path =
+                    std::string(dump) + "." + std::to_string(k) + ".ppm";
+                dumpSurfaceTexture(surfaceTexture, path.c_str());
             }
+            if(const char *fb = std::getenv("KRKR_SDL3_DUMP_FRAMEBUFFER")) {
+                std::string path =
+                    std::string(fb) + "." + std::to_string(k) + ".ppm";
+                // KrkrGLState restored the engine's FBO at the end of draw();
+                // read the window surface explicitly.
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                dumpWindowFramebuffer(path.c_str());
+            }
+            break;
         }
     }
 
