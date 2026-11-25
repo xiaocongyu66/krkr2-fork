@@ -350,7 +350,11 @@ namespace krkr::sdl3 {
                 ? SdlWindowLayer::GetCurrentWindowLayer()->GetLayerHeight()
                 : surfaceTexture.height(),
             scaleX, scaleY);
-        compositor.draw();
+        // Diagnostic: skip the compositor to see what the engine itself left
+        // in the window framebuffer (_screenFrameBuffer defaults to 0 in this
+        // host, so the engine may draw there directly).
+        if(!std::getenv("KRKR_SDL3_NO_COMPOSITE"))
+            compositor.draw();
         compositor.flush();
         // Snapshot pattern shared by both diagnostics.
         static int dumpFrame = 0;
