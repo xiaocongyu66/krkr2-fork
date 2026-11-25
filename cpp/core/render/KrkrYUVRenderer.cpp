@@ -11,34 +11,34 @@ namespace krkr::render {
         // compileProgram). v_fragmentColor is dropped: the sprite color is
         // white and video alpha is always 1 (gl_FragColor.a = 1.0).
         const char *kYuvVertexShader =
-            "attribute vec2 a_position;"
-            "attribute vec2 a_texCoord;"
-            "varying vec2 v_texCoord;"
-            "void main()"
-            "{"
-            "    gl_Position = vec4(a_position, 0.0, 1.0);"
-            "    v_texCoord = a_texCoord;"
-            "}";
+            "attribute vec2 a_position;\n"
+            "attribute vec2 a_texCoord;\n"
+            "varying vec2 v_texCoord;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_Position = vec4(a_position, 0.0, 1.0);\n"
+            "    v_texCoord = a_texCoord;\n"
+            "}\n";
 
         const char *kYuvFragmentShader =
-            "#ifdef GL_ES"
-            "precision mediump float;"
-            "#endif"
-            "varying vec2 v_texCoord;"
-            "uniform sampler2D u_texY;"
-            "uniform sampler2D u_texU;"
-            "uniform sampler2D u_texV;"
-            "void main()"
-            "{"
-            "    vec3 yuv;"
-            "    yuv.x = texture2D(u_texY, v_texCoord).r - 0.0625;"
-            "    yuv.y = texture2D(u_texU, v_texCoord).r - 0.5;"
-            "    yuv.z = texture2D(u_texV, v_texCoord).r - 0.5;"
-            "    vec3 rgb = mat3(1.164, 1.164, 1.164,"
-            "                    0.0, -0.392, 2.017,"
-            "                    1.596, -0.813, 0.0) * yuv;"
-            "    gl_FragColor = vec4(rgb, 1.0);"
-            "}";
+            "#ifdef GL_ES\n"
+            "precision mediump float;\n"
+            "#endif\n"
+            "varying vec2 v_texCoord;\n"
+            "uniform sampler2D u_texY;\n"
+            "uniform sampler2D u_texU;\n"
+            "uniform sampler2D u_texV;\n"
+            "void main()\n"
+            "{\n"
+            "    vec3 yuv;\n"
+            "    yuv.x = texture2D(u_texY, v_texCoord).r - 0.0625;\n"
+            "    yuv.y = texture2D(u_texU, v_texCoord).r - 0.5;\n"
+            "    yuv.z = texture2D(u_texV, v_texCoord).r - 0.5;\n"
+            "    vec3 rgb = mat3(1.164, 1.164, 1.164,\n"
+            "                    0.0, -0.392, 2.017,\n"
+            "                    1.596, -0.813, 0.0) * yuv;\n"
+            "    gl_FragColor = vec4(rgb, 1.0);\n"
+            "}\n";
 
         void uploadPlane(GLuint &name, int &nameW, int &nameH, const void *data,
                          int w, int h) {

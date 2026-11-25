@@ -11,25 +11,25 @@ namespace krkr::render {
         // Present shader: identity position + direct texture sample. Blend is
         // disabled while drawing (BlendFunc::DISABLE, TVPWindow.cpp:626).
         const char *kSurfaceVertexShader =
-            "attribute vec2 a_position;"
-            "attribute vec2 a_texCoord;"
-            "varying vec2 v_texCoord;"
-            "void main()"
-            "{"
-            "    gl_Position = vec4(a_position, 0.0, 1.0);"
-            "    v_texCoord = a_texCoord;"
-            "}";
+            "attribute vec2 a_position;\n"
+            "attribute vec2 a_texCoord;\n"
+            "varying vec2 v_texCoord;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_Position = vec4(a_position, 0.0, 1.0);\n"
+            "    v_texCoord = a_texCoord;\n"
+            "}\n";
 
         const char *kSurfaceFragmentShader =
-            "#ifdef GL_ES"
-            "precision mediump float;"
-            "#endif"
-            "varying vec2 v_texCoord;"
-            "uniform sampler2D u_texture;"
-            "void main()"
-            "{"
-            "    gl_FragColor = texture2D(u_texture, v_texCoord);"
-            "}";
+            "#ifdef GL_ES\n"
+            "precision mediump float;\n"
+            "#endif\n"
+            "varying vec2 v_texCoord;\n"
+            "uniform sampler2D u_texture;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_FragColor = texture2D(u_texture, v_texCoord);\n"
+            "}\n";
     } // namespace
 
     //---------------------------------------------------------------------------
