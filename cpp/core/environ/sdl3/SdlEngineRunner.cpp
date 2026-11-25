@@ -309,11 +309,20 @@ namespace krkr::sdl3 {
         compositor.draw();
         compositor.flush();
         if(const char *dump = std::getenv("KRKR_SDL3_DUMP_SURFACE")) {
-            // First frame suffices; the fixture is static after startup.
-            static bool dumped = false;
-            if(!dumped) {
-                dumped = true;
-                dumpSurfaceTexture(surfaceTexture, dump);
+            // The engine may recreate its draw-buffer texture mid-run; sample
+            // a few frames spread over the run, not just the first.
+            static int frame = 0;
+            static const int frames[] = { 1, 30, 60, 120, 240, 480, 960 };
+            ++frame;
+            for(int k : frames) {
+                if(frame == k) {
+                    std::string path = dump;
+                    path += ".";
+                    path += std::to_string(k);
+                    path += ".ppm";
+                    dumpSurfaceTexture(surfaceTexture, path.c_str());
+                    break;
+                }
             }
         }
     }
