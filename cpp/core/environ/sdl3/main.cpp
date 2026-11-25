@@ -26,8 +26,12 @@ int main(int argc, char **argv) {
     krkr::sdl3::SdlEngineRunner runner;
     if(!runner.init())
         return 1;
-    if(!runner.startEngine(krkr::launch::DesktopTarget()))
-        return 1;
+    // StartApplication's return value is not a success signal -- upstream it
+    // always returns false once the startup sequence finishes (exceptions are
+    // swallowed and reported through ShowException); the cocos host ignores
+    // it too (MainScene.cpp:700). Failure is observable as TVPTerminated or
+    // the log lines instead.
+    runner.startEngine(krkr::launch::DesktopTarget());
     runner.run();
     return krkr::launch::DesktopExitCode() ? krkr::launch::DesktopExitCode()
                                            : 0;
