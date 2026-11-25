@@ -3,6 +3,7 @@
 #include "KrkrYUVRenderer.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 
 namespace krkr::render {
@@ -199,6 +200,23 @@ namespace krkr::render {
         // the texture when flipY is on.
         float v0 = flipY_ ? texV : 0.f;
         float v1 = flipY_ ? 0.f : texV;
+
+        // Diagnostic (env-gated): dump the mapping inputs once per process.
+        if(std::getenv("KRKR_SDL3_DUMP_SURFACE")) {
+            static bool logged = false;
+            if(!logged) {
+                logged = true;
+                std::fprintf(
+                    stderr,
+                    "KRKR_MAP: win=%dx%d vp=%d,%d,%d,%d "
+                    "surface=%dx%d scale=%.4fx%.4f internal=%dx%d "
+                    "texU=%.4f texV=%.4f flipY=%d\n",
+                    winW_, winH_, vp.x, vp.y, vp.w, vp.h, surfaceW_, surfaceH_,
+                    surfaceScaleX_, surfaceScaleY_, surface_->internalWidth(),
+                    surface_->internalHeight(), texU, texV, (int)flipY_);
+                std::fflush(stderr);
+            }
+        }
 
         const float positions[4][2] = {
             { -1.f, -1.f },
