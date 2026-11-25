@@ -169,6 +169,7 @@ namespace krkr::sdl3 {
     SdlEngineRunner::~SdlEngineRunner() {
         SdlWindowLayer::SetDrawBufferCallback({});
         SdlWindowLayer::SetCurrentWindowCallback({});
+        SdlWindowLayer::SetHostResizeProvider({});
         if(renderContext.window() && renderContext.context())
             renderContext.makeCurrent();
         if(pendingTexture)
@@ -280,6 +281,8 @@ namespace krkr::sdl3 {
         SdlWindowLayer::SetCurrentWindowCallback(
             [this](SdlWindowLayer *) { acceptDrawBuffer(nullptr); });
         SdlWindowLayer::SetModalPump([this] { return app.pumpModalFrame(); });
+        SdlWindowLayer::SetHostResizeProvider(
+            [this](int w, int h) { app.resizeWindow(w, h); });
         app.setDrawableSizeCallback([this] {
             int width = 0, height = 0;
             app.getWindowSizeInPixels(width, height);

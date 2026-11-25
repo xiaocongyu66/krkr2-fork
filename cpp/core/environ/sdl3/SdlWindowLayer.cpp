@@ -29,6 +29,7 @@ namespace krkr::sdl3 {
     std::function<void(iTVPTexture2D *)> SdlWindowLayer::DrawBufferCallback;
     std::function<void(SdlWindowLayer *)> SdlWindowLayer::CurrentWindowCallback;
     std::function<bool()> SdlWindowLayer::ModalPump;
+    std::function<void(int, int)> SdlWindowLayer::HostResizeProvider;
 
     SdlWindowLayer::SdlWindowLayer(tTJSNI_Window *window) :
         nativeWindow(window) {
@@ -93,6 +94,11 @@ namespace krkr::sdl3 {
 
     void SdlWindowLayer::SetModalPump(std::function<bool()> pump) {
         ModalPump = std::move(pump);
+    }
+
+    void SdlWindowLayer::SetHostResizeProvider(
+        std::function<void(int, int)> provider) {
+        HostResizeProvider = std::move(provider);
     }
 
     void SdlWindowLayer::notifyImeMode() {
@@ -723,6 +729,8 @@ namespace krkr::sdl3 {
         ContentWidth = w;
         ContentHeight = h;
         RecalcPaintBox();
+        if(HostResizeProvider)
+            HostResizeProvider(static_cast<int>(w), static_cast<int>(h));
     }
 
     void SdlWindowLayer::GetSize(tjs_int &w, tjs_int &h) {

@@ -159,6 +159,17 @@ namespace krkr::sdl3 {
         return running;
     }
 
+    void SdlAppDelegate::resizeWindow(int width, int height) {
+        if(!window || width <= 0 || height <= 0)
+            return;
+        if(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)
+            return;
+        int curW = 0, curH = 0;
+        SDL_GetWindowSize(window, &curW, &curH);
+        if(curW != width || curH != height)
+            SDL_SetWindowSize(window, width, height);
+    }
+
     void SdlAppDelegate::setFullscreen(bool fullscreen) {
         if(!window)
             return;

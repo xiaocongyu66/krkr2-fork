@@ -79,6 +79,10 @@ namespace krkr::sdl3 {
         void setFullscreen(bool fullscreen);
         [[nodiscard]] bool isFullscreen() const;
 
+        // Engine Window::SetSize: resize the desktop window to the requested
+        // client size (ignored in fullscreen, like the desktop hosts).
+        void resizeWindow(int width, int height);
+
         // --- engine hooks
         // -----------------------------------------------------
 

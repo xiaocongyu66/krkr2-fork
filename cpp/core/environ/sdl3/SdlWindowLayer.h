@@ -107,6 +107,12 @@ namespace krkr::sdl3 {
             std::function<void(SdlWindowLayer *)> callback);
         static void SetModalPump(std::function<bool()> pump);
 
+        // Engine Window::SetSize reaches the layer as content metrics; the
+        // shell turns that into a real SDL window resize (the desktop hosts
+        // resize the HWND/client area at the same point).
+        static void
+        SetHostResizeProvider(std::function<void(int, int)> provider);
+
         // --- iWindowLayer (cpp/core/visual/WindowLayer.h)
         // ----------------------
         void SetPaintBoxSize(tjs_int w, tjs_int h) override;
@@ -254,6 +260,7 @@ namespace krkr::sdl3 {
         static std::function<void(iTVPTexture2D *)> DrawBufferCallback;
         static std::function<void(SdlWindowLayer *)> CurrentWindowCallback;
         static std::function<bool()> ModalPump;
+        static std::function<void(int, int)> HostResizeProvider;
     };
 
 } // namespace krkr::sdl3
