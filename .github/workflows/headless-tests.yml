@@ -220,6 +220,8 @@ jobs:
           print('SDL3 shell closure verified (no cocos2dx):', sorted(ports))
           PY
       - name: Run SDL3 X11 pixel smoke
+        env:
+          KRKR_SDL3_DUMP_SURFACE: ${{ github.workspace }}/out/sdl3-shell/pixel-smoke/surface.ppm
         run: xvfb-run -a python3 tools/game-smoke/sdl3_pixel_smoke.py out/sdl3-shell/build/bin/krkr2_sdl3/krkr2_sdl3 out/sdl3-shell/pixel-smoke
       - name: Run SDL3 pixel smoke negative control (must fail)
         shell: bash

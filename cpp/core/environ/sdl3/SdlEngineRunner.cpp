@@ -20,9 +20,19 @@
 
 #include <SDL3/SDL.h>
 
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+// Raw GL for the diagnostic surface dump (SdlAppDelegate initialized GLEW on
+// this thread); mirrors visual/ogl/ogl_common.h's GLEW_STATIC posture.
+#define GLEW_STATIC
+#include <GL/glew.h>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <thread>
+#include <vector>
 
 // Same externs AppDelegate.cpp:26 carries on the cocos host; the engine never
 // declared a header for them.
@@ -164,6 +174,60 @@ const std::string &TVPGetInternalPreferencePath() {
 
 namespace krkr::sdl3 {
 
+    namespace {
+        // Diagnostic only (KRKR_SDL3_DUMP_SURFACE): sample the adopted engine
+        // surface texture through a scratch FBO and write a PPM, so a bad
+        // present mapping can be told apart from bad engine texture content.
+        void dumpSurfaceTexture(const render::KrkrTexture &tex,
+                                const char *path) {
+            GLuint name = tex.glName();
+            if(!name)
+                return;
+            const int w = tex.width();
+            const int h = tex.height();
+            if(w <= 0 || h <= 0)
+                return;
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+            GLuint fbo = 0;
+            glGenFramebuffers(1, &fbo);
+            if(!fbo)
+                return;
+            GLint prevFbo = 0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                   GL_TEXTURE_2D, name, 0);
+            if(glCheckFramebufferStatus(GL_FRAMEBUFFER) !=
+               GL_FRAMEBUFFER_COMPLETE) {
+                glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
+                glDeleteFramebuffers(1, &fbo);
+                return;
+            }
+            glViewport(0, 0, w, h);
+            std::vector<std::uint8_t> buf((size_t)w * h * 4);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+            glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
+            glDeleteFramebuffers(1, &fbo);
+            if(std::FILE *f = std::fopen(path, "wb")) {
+                std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+                std::vector<std::uint8_t> row((size_t)w * 3);
+                for(int y = 0; y < h; ++y) {
+                    const std::uint8_t *src =
+                        buf.data() + (size_t)(h - 1 - y) * w * 4;
+                    for(int x = 0; x < w; ++x) {
+                        row[x * 3 + 0] = src[x * 4 + 0];
+                        row[x * 3 + 1] = src[x * 4 + 1];
+                        row[x * 3 + 2] = src[x * 4 + 2];
+                    }
+                    std::fwrite(row.data(), 1, row.size(), f);
+                }
+                std::fclose(f);
+            }
+#endif
+        }
+    } // namespace
+
     SdlEngineRunner::SdlEngineRunner() = default;
 
     SdlEngineRunner::~SdlEngineRunner() {
@@ -244,6 +308,14 @@ namespace krkr::sdl3 {
             scaleX, scaleY);
         compositor.draw();
         compositor.flush();
+        if(const char *dump = std::getenv("KRKR_SDL3_DUMP_SURFACE")) {
+            // First frame suffices; the fixture is static after startup.
+            static bool dumped = false;
+            if(!dumped) {
+                dumped = true;
+                dumpSurfaceTexture(surfaceTexture, dump);
+            }
+        }
     }
 
     bool SdlEngineRunner::init() {
