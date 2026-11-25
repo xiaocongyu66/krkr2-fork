@@ -225,8 +225,12 @@ namespace krkr::sdl3 {
             GLuint name = tex.glName();
             if(!name)
                 return;
-            const int w = tex.width();
-            const int h = tex.height();
+            // Dump at the texture's real GL storage size, not the logical
+            // size, so the content layout inside it is visible.
+            GLint w = 0, h = 0;
+            glBindTexture(GL_TEXTURE_2D, name);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
             if(w <= 0 || h <= 0)
                 return;
 #if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
@@ -249,16 +253,11 @@ namespace krkr::sdl3 {
             std::vector<std::uint8_t> buf((size_t)w * h * 4);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
-            GLint texW = 0, texH = 0;
-            glBindTexture(GL_TEXTURE_2D, name);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT,
-                                     &texH);
             std::fprintf(stderr,
                          "KRKR_DUMP: tex=%u logical=%dx%d internal=%dx%d "
                          "GLlevel0=%dx%d\n",
-                         name, w, h, tex.internalWidth(), tex.internalHeight(),
-                         (int)texW, (int)texH);
+                         name, tex.width(), tex.height(), tex.internalWidth(),
+                         tex.internalHeight(), (int)w, (int)h);
             std::fflush(stderr);
             glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
             glDeleteFramebuffers(1, &fbo);
